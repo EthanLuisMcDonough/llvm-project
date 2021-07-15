@@ -58,6 +58,7 @@ void initializeBasicBlockSectionsProfileReaderWrapperPassPass(PassRegistry &);
 void initializeBasicBlockSectionsPass(PassRegistry &);
 void initializeBarrierNoopPass(PassRegistry &);
 void initializeBasicAAWrapperPassPass(PassRegistry &);
+void initializeOptimisticAAWrapperPassPass(PassRegistry&);
 void initializeBlockFrequencyInfoWrapperPassPass(PassRegistry &);
 void initializeBranchFolderPassPass(PassRegistry &);
 void initializeBranchProbabilityInfoWrapperPassPass(PassRegistry &);
