@@ -135,6 +135,7 @@
 #include "llvm/Transforms/Utils/MoveAutoInit.h"
 #include "llvm/Transforms/Utils/NameAnonGlobals.h"
 #include "llvm/Transforms/Utils/RelLookupTableConverter.h"
+#include "llvm/Transforms/Utils/ShuffleBB.h"
 #include "llvm/Transforms/Utils/SimplifyCFGOptions.h"
 #include "llvm/Transforms/Vectorize/LoopVectorize.h"
 #include "llvm/Transforms/Vectorize/SLPVectorizer.h"
@@ -234,6 +235,8 @@ static cl::opt<bool> EnablePGOForceFunctionAttrs(
 static cl::opt<bool>
     EnableHotColdSplit("hot-cold-split",
                        cl::desc("Enable hot-cold splitting pass"));
+static cl::opt<bool>
+    EnableShuffleBB("shuffle-bb", cl::desc("Enable BB reordering prototype"));
 
 static cl::opt<bool> EnableIROutliner("ir-outliner", cl::init(false),
                                       cl::Hidden,
@@ -1907,6 +1910,9 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
     FPM.addPass(ConstraintEliminationPass());
 
   FPM.addPass(JumpThreadingPass());
+
+  if (EnableShuffleBB)
+    FPM.addPass(ShuffleBasicBlocksPass());
 
   // Do a post inline PGO instrumentation and use pass. This is a context
   // sensitive PGO pass.
