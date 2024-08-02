@@ -1481,9 +1481,7 @@ Error GenericDeviceTy::launchKernel(void *EntryPtr, void **ArgPtrs,
                                     ptrdiff_t *ArgOffsets,
                                     KernelArgsTy &KernelArgs,
                                     __tgt_async_info *AsyncInfo) {
-  AsyncInfoWrapperTy AsyncInfoWrapper(
-      *this,
-      Plugin.getRecordReplay().isRecordingOrReplaying() ? nullptr : AsyncInfo);
+  AsyncInfoWrapperTy AsyncInfoWrapper(*this, nullptr);
 
   GenericKernelTy &GenericKernel =
       *reinterpret_cast<GenericKernelTy *>(EntryPtr);
@@ -1505,6 +1503,8 @@ Error GenericDeviceTy::launchKernel(void *EntryPtr, void **ArgPtrs,
 
   // 'finalize' here to guarantee next record-replay actions are in-sync
   AsyncInfoWrapper.finalize(Err);
+
+  ErrorReporter::checkAndReportError(*this, AsyncInfo);
 
   RecordReplayTy &RecordReplay = Plugin.getRecordReplay();
   if (RecordReplay.isRecordingOrReplaying() &&
