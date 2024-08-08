@@ -3195,7 +3195,7 @@ define internal i32 @recSimplify2() {
   ret i32 %r
 }
 
-; TODO: Verify we do not return 10.
+; Verify we do not return 10.
 define i32 @may_access_after_return(i32 noundef %N, i32 noundef %M) {
 ; TUNIT: Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
 ; TUNIT-LABEL: define {{[^@]+}}@may_access_after_return
@@ -3204,7 +3204,10 @@ define i32 @may_access_after_return(i32 noundef %N, i32 noundef %M) {
 ; TUNIT-NEXT:    [[A:%.*]] = alloca i32, align 4
 ; TUNIT-NEXT:    [[B:%.*]] = alloca i32, align 4
 ; TUNIT-NEXT:    call void @write_both(ptr nocapture nofree noundef nonnull writeonly align 4 dereferenceable(4) [[A]], ptr nocapture nofree noundef nonnull writeonly align 4 dereferenceable(4) [[B]]) #[[ATTR18]]
-; TUNIT-NEXT:    ret i32 10
+; TUNIT-NEXT:    [[TMP0:%.*]] = load i32, ptr [[A]], align 4
+; TUNIT-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B]], align 4
+; TUNIT-NEXT:    [[ADD:%.*]] = add nsw i32 [[TMP0]], [[TMP1]]
+; TUNIT-NEXT:    ret i32 [[ADD]]
 ;
 ; CGSCC: Function Attrs: mustprogress nofree nosync nounwind willreturn memory(none)
 ; CGSCC-LABEL: define {{[^@]+}}@may_access_after_return
@@ -3256,7 +3259,7 @@ entry:
   ret ptr %P
 }
 
-; TODO: Verify we do not return 10.
+; Verify we do not return 10.
 define i32 @may_access_after_return_choice(i32 noundef %N, i32 noundef %M, i1 %c) {
 ; TUNIT: Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
 ; TUNIT-LABEL: define {{[^@]+}}@may_access_after_return_choice
@@ -3267,7 +3270,10 @@ define i32 @may_access_after_return_choice(i32 noundef %N, i32 noundef %M, i1 %c
 ; TUNIT-NEXT:    [[CALL:%.*]] = call nonnull align 4 dereferenceable(4) ptr @passthrough_choice(i1 [[C]], ptr noalias nofree noundef nonnull readnone align 4 dereferenceable(4) "no-capture-maybe-returned" [[A]], ptr noalias nofree noundef nonnull readnone align 4 dereferenceable(4) "no-capture-maybe-returned" [[B]]) #[[ATTR23:[0-9]+]]
 ; TUNIT-NEXT:    [[CALL1:%.*]] = call nonnull align 4 dereferenceable(4) ptr @passthrough_choice(i1 [[C]], ptr noalias nofree noundef nonnull readnone align 4 dereferenceable(4) "no-capture-maybe-returned" [[B]], ptr noalias nofree noundef nonnull readnone align 4 dereferenceable(4) "no-capture-maybe-returned" [[A]]) #[[ATTR23]]
 ; TUNIT-NEXT:    call void @write_both(ptr nocapture nofree noundef nonnull writeonly align 4 dereferenceable(4) [[CALL]], ptr nocapture nofree noundef nonnull writeonly align 4 dereferenceable(4) [[CALL1]]) #[[ATTR18]]
-; TUNIT-NEXT:    ret i32 10
+; TUNIT-NEXT:    [[TMP0:%.*]] = load i32, ptr [[A]], align 4
+; TUNIT-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B]], align 4
+; TUNIT-NEXT:    [[ADD:%.*]] = add nsw i32 [[TMP0]], [[TMP1]]
+; TUNIT-NEXT:    ret i32 [[ADD]]
 ;
 ; CGSCC: Function Attrs: mustprogress nofree nosync nounwind willreturn
 ; CGSCC-LABEL: define {{[^@]+}}@may_access_after_return_choice
@@ -3308,7 +3314,7 @@ entry:
   ret ptr %R
 }
 
-; TODO: Verify we do not return 10.
+; Verify we do not return 10.
 define i32 @may_access_after_return_no_choice1(i32 noundef %N, i32 noundef %M) {
 ; TUNIT: Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
 ; TUNIT-LABEL: define {{[^@]+}}@may_access_after_return_no_choice1
@@ -3317,7 +3323,10 @@ define i32 @may_access_after_return_no_choice1(i32 noundef %N, i32 noundef %M) {
 ; TUNIT-NEXT:    [[A:%.*]] = alloca i32, align 4
 ; TUNIT-NEXT:    [[B:%.*]] = alloca i32, align 4
 ; TUNIT-NEXT:    call void @write_both(ptr nocapture nofree noundef nonnull writeonly align 4 dereferenceable(4) [[A]], ptr nocapture nofree noundef nonnull writeonly align 4 dereferenceable(4) [[B]]) #[[ATTR18]]
-; TUNIT-NEXT:    ret i32 10
+; TUNIT-NEXT:    [[TMP0:%.*]] = load i32, ptr [[A]], align 4
+; TUNIT-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B]], align 4
+; TUNIT-NEXT:    [[ADD:%.*]] = add nsw i32 [[TMP0]], [[TMP1]]
+; TUNIT-NEXT:    ret i32 [[ADD]]
 ;
 ; CGSCC: Function Attrs: mustprogress nofree nosync nounwind willreturn memory(none)
 ; CGSCC-LABEL: define {{[^@]+}}@may_access_after_return_no_choice1
@@ -3343,7 +3352,7 @@ entry:
   ret i32 %add
 }
 
-; TODO: Verify we do not return 10.
+; Verify we do not return 10.
 define i32 @may_access_after_return_no_choice2(i32 noundef %N, i32 noundef %M) {
 ; TUNIT: Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
 ; TUNIT-LABEL: define {{[^@]+}}@may_access_after_return_no_choice2
@@ -3352,7 +3361,10 @@ define i32 @may_access_after_return_no_choice2(i32 noundef %N, i32 noundef %M) {
 ; TUNIT-NEXT:    [[A:%.*]] = alloca i32, align 4
 ; TUNIT-NEXT:    [[B:%.*]] = alloca i32, align 4
 ; TUNIT-NEXT:    call void @write_both(ptr nocapture nofree noundef nonnull writeonly align 4 dereferenceable(4) [[B]], ptr nocapture nofree noundef nonnull writeonly align 4 dereferenceable(4) [[A]]) #[[ATTR18]]
-; TUNIT-NEXT:    ret i32 10
+; TUNIT-NEXT:    [[TMP0:%.*]] = load i32, ptr [[A]], align 4
+; TUNIT-NEXT:    [[TMP1:%.*]] = load i32, ptr [[B]], align 4
+; TUNIT-NEXT:    [[ADD:%.*]] = add nsw i32 [[TMP0]], [[TMP1]]
+; TUNIT-NEXT:    ret i32 [[ADD]]
 ;
 ; CGSCC: Function Attrs: mustprogress nofree nosync nounwind willreturn memory(none)
 ; CGSCC-LABEL: define {{[^@]+}}@may_access_after_return_no_choice2
