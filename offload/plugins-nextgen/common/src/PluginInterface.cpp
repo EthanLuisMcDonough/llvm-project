@@ -1576,6 +1576,11 @@ Error GenericDeviceTy::syncEvent(void *EventPtr) {
 
 bool GenericDeviceTy::useAutoZeroCopy() { return useAutoZeroCopyImpl(); }
 
+void *GenericDeviceTy::createFakeHostPtr(void *DevicePtr, int64_t Size) {
+  return nullptr;
+}
+void GenericDeviceTy::removeFakeHostPtr(void *FakeHstPtr) {}
+
 Error GenericPluginTy::init() {
   if (Initialized)
     return Plugin::success();
@@ -1889,7 +1894,8 @@ int32_t GenericPluginTy::data_unlock(int32_t DeviceId, void *Ptr) {
 }
 
 int32_t GenericPluginTy::data_notify_mapped(int32_t DeviceId, void *HstPtr,
-                                            int64_t Size) {
+                                            void *DevicePtr, int64_t Size,
+                                            void *&FakeHstPtr) {
   auto Err = getDevice(DeviceId).notifyDataMapped(HstPtr, Size);
   if (Err) {
     REPORT("Failure to notify data mapped %p: %s\n", HstPtr,
@@ -1897,16 +1903,21 @@ int32_t GenericPluginTy::data_notify_mapped(int32_t DeviceId, void *HstPtr,
     return OFFLOAD_FAIL;
   }
 
+  FakeHstPtr = getDevice(DeviceId).createFakeHostPtr(DevicePtr, Size);
+
   return OFFLOAD_SUCCESS;
 }
 
-int32_t GenericPluginTy::data_notify_unmapped(int32_t DeviceId, void *HstPtr) {
+int32_t GenericPluginTy::data_notify_unmapped(int32_t DeviceId, void *HstPtr,
+                                              void *FakeHstPtr) {
   auto Err = getDevice(DeviceId).notifyDataUnmapped(HstPtr);
   if (Err) {
     REPORT("Failure to notify data unmapped %p: %s\n", HstPtr,
            toString(std::move(Err)).data());
     return OFFLOAD_FAIL;
   }
+
+  getDevice(DeviceId).removeFakeHostPtr(FakeHstPtr);
 
   return OFFLOAD_SUCCESS;
 }
