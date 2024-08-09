@@ -2685,6 +2685,20 @@ define <vscale x 4 x float> @scalable_splat_zero() {
 ; See https://github.com/llvm/llvm-project/issues/78507
 
 define double @call_abs(double noundef %__x) {
+; TUNIT: Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
+; TUNIT-LABEL: define noundef nofpclass(ninf nzero nsub nnorm) double @call_abs
+; TUNIT-SAME: (double noundef [[__X:%.*]]) #[[ATTR3]] {
+; TUNIT-NEXT:  entry:
+; TUNIT-NEXT:    [[ABS:%.*]] = tail call noundef nofpclass(ninf nzero nsub nnorm) double @llvm.fabs.f64(double noundef [[__X]]) #[[ATTR22]]
+; TUNIT-NEXT:    ret double [[ABS]]
+;
+; CGSCC: Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
+; CGSCC-LABEL: define noundef nofpclass(ninf nzero nsub nnorm) double @call_abs
+; CGSCC-SAME: (double noundef [[__X:%.*]]) #[[ATTR3]] {
+; CGSCC-NEXT:  entry:
+; CGSCC-NEXT:    [[ABS:%.*]] = tail call noundef nofpclass(ninf nzero nsub nnorm) double @llvm.fabs.f64(double noundef [[__X]]) #[[ATTR19]]
+; CGSCC-NEXT:    ret double [[ABS]]
+;
 entry:
   %abs = tail call double @llvm.fabs.f64(double %__x)
   ret double %abs
