@@ -1472,7 +1472,7 @@ struct AAPointerInfoImpl
   void trackPointerInfoStatistics(const IRPosition &IRP) const {}
 
   /// Dump the state into \p O.
-  void dumpState(raw_ostream &O) {
+  void dumpState(raw_ostream &O) const {
     for (auto &It : OffsetBins) {
       O << "[" << It.first.Offset << "-" << It.first.Offset + It.first.Size
         << "] : " << It.getSecond().size() << "\n";
@@ -1962,31 +1962,24 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
             dyn_cast_or_null<Argument>(ReturnedValue.value_or(nullptr));
         auto *Arg = Callee->getArg(ArgNo);
         if (ReturnedArg && Arg != ReturnedArg)
-          return true;
+          return isValidState();
         const auto *CSRetPI = A.getAAFor<AAPointerInfo>(
             *this, IRPosition::callsite_returned(*CB), DepClassTy::REQUIRED);
         if (!CSRetPI)
           return false;
-        static SmallPtrSet<const AAPointerInfo *, 8> APIs;
-        if (!APIs.count(CSRetPI) && APIs.size() > 67)
-          return false;
-        if (APIs.insert(CSRetPI).second)
-          getAssociatedFunction()->dump();
-        errs() << "\n\n"
-               << this << " : " << CSArgPI << " :: " << CSRetPI
-               << " :: " << APIs.size() << "\n";
-        CSArgPI->dump();
-        CSRetPI->dump();
-        dump();
         bool IsRetMustAcc = IsArgMustAcc && ReturnedArg == Arg;
-        OffsetInfo OI = OffsetInfoMap[CurPtr];
+        OffsetInfo Union;
+
         const auto &ArgState =
             static_cast<const AA::PointerInfo::State &>(CSArgPI->getState());
-        for (auto &It : ArgState.getReturnedOffsetInfo())
+        for (auto &It : ArgState.getReturnedOffsetInfo()) {
+          OffsetInfo OI = OffsetInfoMap[CurPtr];
           OI.addToAll(It);
-        Changed =
-            translateAndAddState(A, *CSRetPI, OI, *CB, IsRetMustAcc) | Changed;
-        dump();
+          Union.merge(OI);
+        }
+
+        Changed = translateAndAddState(A, *CSRetPI, Union, *CB, IsRetMustAcc) |
+                  Changed;
         return isValidState();
       }
       LLVM_DEBUG(dbgs() << "[AAPointerInfo] Call user not handled " << *CB
