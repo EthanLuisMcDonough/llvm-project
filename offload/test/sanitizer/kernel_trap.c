@@ -25,10 +25,10 @@
 int main(void) {
 
 #pragma omp target
+  {}
+#pragma omp target
   {
   }
-#pragma omp target
-  {}
 #pragma omp target teams num_teams(32) thread_limit(128)
   {
 #pragma omp parallel
