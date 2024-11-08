@@ -28,11 +28,13 @@ int main(void) {
 #pragma omp target thread_limit(1)
   { __builtin_trap(); }
 }
-// TRACE: OFFLOAD ERROR: Kernel {{.*}} (__omp_offloading_{{.*}}_main_l29)
+// clang-format off
+// TRACE: OFFLOAD ERROR: Kernel 'omp target in main @ 28 (__omp_offloading_{{.*}}_main_{{.*}})'
 // NOSAN: OFFLOAD ERROR: execution stopped, reason is unknown
-// NOSAN: Compile with '-mllvm -amdgpu-enable-offload-sanitizer' improved
-// diagnosis SANIT: OFFLOAD ERROR: execution interrupted by hardware trap
-// instruction SANIT: Triggered by thread <0,0,0> block <0,0,0> PC 0x{{.*}}
+// NOSAN: Compile with '-mllvm -amdgpu-enable-offload-sanitizer' improved diagnosis
+// SANIT: OFFLOAD ERROR: execution interrupted by hardware trap instruction
+// SANIT: Triggered by thread <0,0,0> block <0,0,0> PC 0x{{.*}}
 // TRACE:     launchKernel
 // NDEBG:     main
 // DEBUG:     main {{.*}}kernel_trap_many.c:
+// clang-format on
