@@ -86,8 +86,9 @@ static cl::opt<std::string> OptAATarget("opt-aa-target", cl::Hidden, cl::desc(""
 unsigned int OptimisticAAResult::currentDecision;
 
 AliasResult OptimisticAAResult::alias(const MemoryLocation &LocA,
-                                 const MemoryLocation &LocB,
-                                 AAQueryInfo &AAQI) {
+                                      const MemoryLocation &LocB,
+                                      AAQueryInfo &AAQI,
+                                      const Instruction *CtxI) {
   // if no opt-aa-seq is given in the command line, we probably don't want any of this to happen.
   if(OptAASequence.empty()) {
     return AliasResult::MayAlias;
@@ -225,10 +226,3 @@ bool OptimisticAAWrapperPass::runOnFunction(Function &F) {
 void OptimisticAAWrapperPass::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesAll();
 }
-
-//OptimisticAAResult llvm::createLegacyPMOptimisticAAResult(Pass &P, Function &F) {
-//  return OptimisticAAResult(
-//      F.getParent()->getDataLayout(), F,
-//      P.getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F),
-//      P.getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F));
-//}

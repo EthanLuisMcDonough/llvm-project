@@ -14,7 +14,6 @@
 #define LLVM_ANALYSIS_OPTIMISTICALIASANALYSIS_H
 
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -25,9 +24,9 @@
 #include "llvm/Pass.h"
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <utility>
-#include <map>
 
 namespace llvm {
 
@@ -48,8 +47,7 @@ class Value;
 
 /// This is the AA result object for the optimistic alias
 /// analysis.
-class OptimisticAAResult : public AAResultBase<OptimisticAAResult> {
-  friend AAResultBase<OptimisticAAResult>;
+class OptimisticAAResult : public AAResultBase {
   std::map<std::pair<const llvm::Value* const, const llvm::Value* const>, bool> decisionCache;
   static unsigned int currentDecision;
 
@@ -57,8 +55,7 @@ public:
   std::vector<int> decisions;
   bool optAAEnabled;
   AliasResult alias(const MemoryLocation &LocA, const MemoryLocation &LocB,
-                    AAQueryInfo &AAQI);
-
+                    AAQueryInfo &AAQI, const Instruction *CtxI = nullptr);
 };
 
 /// Analysis pass providing a never-invalidated alias analysis result.
