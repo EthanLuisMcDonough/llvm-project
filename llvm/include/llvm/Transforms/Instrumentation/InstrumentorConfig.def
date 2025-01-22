@@ -341,6 +341,27 @@ CONFIG(CallArg, bool, ReplaceValue, true)
 SECTION_END(CallArg)
 ///}
 
+/// Branch
+///{
+SECTION_START(Branch, BranchInst)
+
+/// Should conditional branches be instrumented?
+CONFIG(Branch, bool, InstrumentConditional, true)
+
+/// Should unconditional branches be instrumented?
+CONFIG(Branch, bool, InstrumentUnconditional, true)
+
+/// Selection of information passed to the runtime.
+///{
+/// Whether or not the branch instruction is conditional
+CONFIG(Branch, bool, IsConditional, true)
+/// The boolean value of the conditional
+CONFIG(Branch, bool, Value, true)
+///}
+
+SECTION_END(Branch)
+///}
+
 /// BasePointer
 ///{
 SECTION_START(BasePointer, Value)

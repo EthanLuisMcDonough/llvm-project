@@ -247,6 +247,7 @@ private:
   bool instrumentUnreachable(UnreachableInst &I);
   bool instrumentMainFunction(Function &MainFn);
   bool instrumentModule(bool After);
+  bool instrumentBranch(BranchInst &I);
 
   DenseMap<Value *, CallInst *> BasePtrMap;
   bool instrumentBasePointer(Value &ArgOrInst);
@@ -418,6 +419,7 @@ private:
   Type *VoidTy = Type::getVoidTy(Ctx);
   Type *IntptrTy = M.getDataLayout().getIntPtrType(Ctx);
   PointerType *PtrTy = PointerType::getUnqual(Ctx);
+  IntegerType *Int1Ty = Type::getInt1Ty(Ctx);
   IntegerType *Int8Ty = Type::getInt8Ty(Ctx);
   IntegerType *Int32Ty = Type::getInt32Ty(Ctx);
   IntegerType *Int64Ty = Type::getInt64Ty(Ctx);
@@ -1222,6 +1224,11 @@ bool InstrumentorImpl::instrumentFunction(Function &Fn) {
         if (IC.Store.Instrument)
           Changed |= instrumentStore(cast<StoreInst>(I));
         break;
+      case Instruction::Br:
+        if (IC.Branch.InstrumentConditional ||
+            IC.Branch.InstrumentUnconditional)
+          Changed |= instrumentBranch(cast<BranchInst>(I));
+        break;
       case Instruction::Unreachable:
         if (IC.Unreachable.Instrument)
           Changed |= instrumentUnreachable(cast<UnreachableInst>(I));
@@ -1342,6 +1349,40 @@ bool InstrumentorImpl::instrumentModule(bool After) {
   FunctionCallee FC = getCallee("module", RTArgTypes, RTArgNames, /*After=*/After,
                                 /*Indirection=*/false);
 
+  IRB.CreateCall(FC, RTArgs);
+
+  return true;
+}
+
+bool InstrumentorImpl::instrumentBranch(BranchInst &I) {
+  if (!(IC.Branch.InstrumentConditional && I.isConditional()) &&
+      !(IC.Branch.InstrumentUnconditional && I.isUnconditional()))
+    return false;
+
+  SmallVector<Type *> RTArgTypes;
+  SmallVector<Value *> RTArgs;
+  SmallVector<std::string> RTArgNames;
+
+  IRB.SetInsertPoint(&I);
+
+  if (IC.Branch.IsConditional) {
+    RTArgTypes.push_back(Int1Ty);
+    RTArgNames.push_back("IsConditional");
+    RTArgs.push_back(ConstantInt::getBool(Int1Ty, I.isConditional()));
+  }
+
+  if (IC.Branch.Value) {
+    RTArgTypes.push_back(Int1Ty);
+    RTArgNames.push_back("Value");
+    if (I.isUnconditional())
+      RTArgs.push_back(ConstantInt::getTrue(Int1Ty));
+    else
+      RTArgs.push_back(I.getCondition());
+  }
+
+  FunctionCallee FC =
+      getCallee("branch", RTArgTypes, RTArgNames, /*After=*/false,
+                /*Indirection=*/false);
   IRB.CreateCall(FC, RTArgs);
 
   return true;
