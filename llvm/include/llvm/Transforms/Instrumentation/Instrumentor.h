@@ -60,6 +60,7 @@ using GlobalCallbackTy = std::function<bool(GlobalObject &)>;
 struct InstrumentorConfig {
   static Type *getType(LLVMContext &Ctx, StringRef S) {
     auto *Ty = StringSwitch<Type *>(S)
+                   .Case("int1_t", Type::getInt1Ty(Ctx))
                    .Case("int8_t", Type::getInt8Ty(Ctx))
                    .Case("int16_t", Type::getInt16Ty(Ctx))
                    .Case("int32_t", Type::getInt32Ty(Ctx))

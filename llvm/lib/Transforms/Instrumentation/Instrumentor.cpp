@@ -471,6 +471,7 @@ private:
   bool instrumentStore(StoreInst &I, InstrumentorConfig::Position P);
   bool instrumentUnreachable(UnreachableInst &I,
                              InstrumentorConfig::Position P);
+  bool instrumentBranch(BranchInst &I, InstrumentorConfig::Position P);
   bool instrumentMainFunction(Function &MainFn, InstrumentorConfig::Position P);
   bool instrumentModule(InstrumentorConfig::Position P);
 
@@ -1417,6 +1418,34 @@ bool InstrumentorImpl::instrumentUnreachable(UnreachableInst &I,
   return true;
 }
 
+bool InstrumentorImpl::instrumentBranch(BranchInst &I,
+                                        InstrumentorConfig::Position P) {
+  if (!IC.branch.isEnabled(P))
+    return false;
+  if (IC.branch.CB && !IC.branch.CB(I))
+    return false;
+  if (I.isConditional() && !IC.branch.InstrumentConditional)
+    return false;
+  if (I.isUnconditional() && !IC.branch.InstrumentUnconditional)
+    return false;
+
+  assert(P != InstrumentorConfig::PRE_AND_POST &&
+         P != InstrumentorConfig::POST);
+
+  setInsertPoint(I, P);
+  SmallVector<RTArgument> RTArgs;
+
+  addCI(RTArgs, IC.branch.IsConditional, uint64_t(I.isConditional()), P);
+  if (I.isConditional())
+    addVal(RTArgs, IC.branch.Value, I.getCondition(), P);
+  else
+    addCI(RTArgs, IC.branch.Value, 0, P);
+
+  getCall(IC.branch.SectionName, RTArgs, P);
+
+  return true;
+}
+
 bool InstrumentorImpl::instrumentFunction(Function &Fn) {
   bool Changed = false;
   if (!shouldInstrumentFunction(&Fn))
@@ -1494,6 +1523,12 @@ bool InstrumentorImpl::instrumentFunction(Function &Fn) {
                                          InstrumentorConfig::PRE);
         Changed |= instrumentUnreachable(cast<UnreachableInst>(I),
                                          InstrumentorConfig::POST);
+        break;
+      case Instruction::Br:
+        Changed |=
+            instrumentBranch(cast<BranchInst>(I), InstrumentorConfig::PRE);
+        Changed |=
+            instrumentBranch(cast<BranchInst>(I), InstrumentorConfig::POST);
         break;
       default:
         break;

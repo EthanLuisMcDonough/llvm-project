@@ -335,6 +335,27 @@ CVALUE(base_pointer, bool, SkipUnused, true)
 SECTION_END(base_pointer)
 ///}
 
+SECTION_START(branch, InstrumentorConfig::PRE)
+
+/// Selection of information passed to the runtime.
+///{
+/// Whether or not the branch instruction is conditional
+RTVALUE(branch, IsConditional, true, "int1_t", PLAIN)
+
+/// The boolean value of the conditional
+RTVALUE(branch, Value, true, "int1_t", PLAIN)
+///}
+
+/// Should conditional branches be instrumented?
+CVALUE(branch, bool, InstrumentConditional, true)
+
+/// Should unconditional branches be instrumented?
+CVALUE(branch, bool, InstrumentUnconditional, true)
+
+CVALUE_INTERNAL(branch, CallbackTy, CB, nullptr)
+
+SECTION_END(branch)
+
 #undef SECTION_START
 #undef CVALUE
 #undef CVALUE_INTERNAL

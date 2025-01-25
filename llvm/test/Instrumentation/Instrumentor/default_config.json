@@ -114,5 +114,12 @@
     "EnabledPost": true,
     "Value": true,
     "SkipUnused": true
+  },
+  "branch": {
+    "EnabledPre": true,
+    "IsConditional": true,
+    "Value": true,
+    "InstrumentConditional": true,
+    "InstrumentUnconditional": true
   }
 }
