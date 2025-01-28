@@ -42,6 +42,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Regex.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
@@ -455,6 +456,8 @@ private:
                              InstrumentorConfig::Position P);
   bool instrumentMainFunction(Function &MainFn, InstrumentorConfig::Position P);
   bool instrumentModule(InstrumentorConfig::Position P);
+
+  bool canInstrumentTarget();
 
   DenseMap<Value *, CallInst *> BasePtrMap;
   bool instrumentBasePointer(Value &ArgOrInst);
@@ -939,6 +942,7 @@ bool InstrumentorImpl::instrumentCall(CallBase &I,
     break;
   case Intrinsic::not_intrinsic:
     Changed |= instrumentGenericCall(I, P);
+    break;
   default:
     break;
   }
@@ -1705,9 +1709,28 @@ void InstrumentorImpl::addCtorOrDtor(bool Ctor) {
   }
 }
 
+bool InstrumentorImpl::canInstrumentTarget() {
+  const auto TripleStr = M.getTargetTriple();
+  const auto &T = Triple(TripleStr);
+  const bool IsGPU = T.isAMDGPU() || T.isNVPTX();
+  llvm::Regex TargetRegex(IC.Base.TargetRegex);
+  std::string ErrMsg;
+
+  if (!TargetRegex.isValid(ErrMsg)) {
+    errs() << "WARNING: failed to parse TargetRegex: " << ErrMsg << "\n";
+  }
+
+  return ((IsGPU && IC.Base.InstrumentGpu) ||
+          (!IsGPU && IC.Base.InstrumentHost)) &&
+         TargetRegex.match(TripleStr);
+}
+
 bool InstrumentorImpl::instrument() {
   bool Changed = false;
   printRuntimeSignatures();
+
+  if (!canInstrumentTarget())
+    return Changed;
 
   Function *MainFn = nullptr;
 

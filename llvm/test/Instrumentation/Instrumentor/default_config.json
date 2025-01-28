@@ -2,7 +2,10 @@
   "Base": {
     "RuntimeName": "__instrumentor_",
     "PrintRuntimeSignatures": true,
-    "StubRuntimePath": "rt.c"
+    "StubRuntimePath": "rt.c",
+    "TargetRegex": ".*",
+    "InstrumentHost": true,
+    "InstrumentGpu": true
   },
   "alloca": {
     "EnabledPost": true,

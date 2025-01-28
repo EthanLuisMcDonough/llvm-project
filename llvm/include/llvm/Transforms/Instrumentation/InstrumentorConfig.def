@@ -23,6 +23,12 @@ CVALUE(Base, bool, PrintRuntimeSignatures, true)
 
 CVALUE(Base, std::string, StubRuntimePath, "rt.c")
 
+CVALUE(Base, std::string, TargetRegex, ".*")
+
+CVALUE(Base, bool, InstrumentHost, true)
+
+CVALUE(Base, bool, InstrumentGpu, true)
+
 SECTION_END(Base)
 ///}
 
