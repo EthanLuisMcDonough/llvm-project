@@ -4,12 +4,13 @@ define i32 @foo(i1 %c) {
 ; CHECK-LABEL: define i32 @foo(
 ; CHECK-SAME: i1 [[C:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    call void @__instrumentor_pre_branch(i1 true, i1 [[C]])
+; CHECK-NEXT:    [[TMP0:%.*]] = zext i1 [[C]] to i8
+; CHECK-NEXT:    call void @__instrumentor_pre_branch(i8 1, i8 [[TMP0]], i64 2)
 ; CHECK-NEXT:    br i1 [[C]], label %[[A:.*]], label %[[B:.*]]
 ; CHECK:       [[A]]:
 ; CHECK-NEXT:    ret i32 0
 ; CHECK:       [[B]]:
-; CHECK-NEXT:    call void @__instrumentor_pre_branch(i1 false, i1 false)
+; CHECK-NEXT:    call void @__instrumentor_pre_branch(i8 0, i8 1, i64 1)
 ; CHECK-NEXT:    br label %[[D:.*]]
 ; CHECK:       [[D]]:
 ; CHECK-NEXT:    ret i32 1

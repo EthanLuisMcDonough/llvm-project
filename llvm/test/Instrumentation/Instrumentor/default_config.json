@@ -119,7 +119,8 @@
     "EnabledPre": true,
     "IsConditional": true,
     "Value": true,
-    "InstrumentConditional": true,
-    "InstrumentUnconditional": true
+    "Successors": true,
+    "SkipConditional": false,
+    "SkipUnconditional": false
   }
 }

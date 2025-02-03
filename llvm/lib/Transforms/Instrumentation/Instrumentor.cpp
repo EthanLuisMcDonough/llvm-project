@@ -486,7 +486,6 @@ private:
   bool instrumentStore(StoreInst &I, InstrumentorConfig::Position P);
   bool instrumentUnreachable(UnreachableInst &I,
                              InstrumentorConfig::Position P);
-
   bool instrumentBranch(BranchInst &I, InstrumentorConfig::Position P);
   bool instrumentMainFunction(Function &MainFn);
   bool instrumentModule(InstrumentorConfig::Position P);
@@ -1483,24 +1482,26 @@ bool InstrumentorImpl::instrumentBranch(BranchInst &I,
     return false;
   if (IC.branch.CB && !IC.branch.CB(I))
     return false;
-  if (I.isConditional() && !IC.branch.InstrumentConditional)
+  if (I.isConditional() && IC.branch.SkipConditional)
     return false;
-  if (I.isUnconditional() && !IC.branch.InstrumentUnconditional)
+  if (I.isUnconditional() && IC.branch.SkipUnconditional)
     return false;
 
   assert(P != InstrumentorConfig::PRE_AND_POST &&
          P != InstrumentorConfig::POST);
 
+  RTArgumentPack RTArgPack(*this);
   setInsertPoint(I, P);
   SmallVector<RTArgument> RTArgs;
 
-  addCI(RTArgs, IC.branch.IsConditional, uint64_t(I.isConditional()), P);
+  RTArgPack.addCI(IC.branch.IsConditional, I.isConditional(), P);
   if (I.isConditional())
-    addVal(RTArgs, IC.branch.Value, I.getCondition(), P);
+    RTArgPack.addVal(IC.branch.Value, I.getCondition(), P);
   else
-    addCI(RTArgs, IC.branch.Value, 0, P);
+    RTArgPack.addCI(IC.branch.Value, 1, P);
+  RTArgPack.addCI(IC.branch.Successors, I.getNumSuccessors(), P);
 
-  getCall(IC.branch.SectionName, RTArgs, P);
+  getCall(IC.branch.SectionName, RTArgPack, P);
 
   return true;
 }
@@ -1588,8 +1589,6 @@ bool InstrumentorImpl::instrumentFunction(Function &Fn) {
       case Instruction::Br:
         Changed |=
             instrumentBranch(cast<BranchInst>(I), InstrumentorConfig::PRE);
-        Changed |=
-            instrumentBranch(cast<BranchInst>(I), InstrumentorConfig::POST);
         break;
       default:
         break;

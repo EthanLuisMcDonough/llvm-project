@@ -357,17 +357,20 @@ SECTION_START(branch, InstrumentorConfig::PRE)
 /// Selection of information passed to the runtime.
 ///{
 /// Whether or not the branch instruction is conditional
-RTVALUE(branch, IsConditional, true, "int1_t", PLAIN)
+RTVALUE(branch, IsConditional, true, "int8_t", BOOLEAN)
 
 /// The boolean value of the conditional
-RTVALUE(branch, Value, true, "int1_t", PLAIN)
+RTVALUE(branch, Value, true, "int8_t", BOOLEAN)
+
+/// Number of branch successors
+RTVALUE(branch, Successors, true, "int64_t", PLAIN)
 ///}
 
 /// Should conditional branches be instrumented?
-CVALUE(branch, bool, InstrumentConditional, true)
+CVALUE(branch, bool, SkipConditional, false)
 
 /// Should unconditional branches be instrumented?
-CVALUE(branch, bool, InstrumentUnconditional, true)
+CVALUE(branch, bool, SkipUnconditional, false)
 
 CVALUE_INTERNAL(branch, CallbackTy, CB, nullptr)
 
