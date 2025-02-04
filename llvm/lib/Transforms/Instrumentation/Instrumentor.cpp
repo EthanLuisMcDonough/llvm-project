@@ -942,7 +942,6 @@ bool InstrumentorImpl::instrumentCall(CallBase &I,
     break;
   case Intrinsic::not_intrinsic:
     Changed |= instrumentGenericCall(I, P);
-    break;
   default:
     break;
   }
@@ -1713,15 +1712,16 @@ bool InstrumentorImpl::canInstrumentTarget() {
   const auto TripleStr = M.getTargetTriple();
   const auto &T = Triple(TripleStr);
   const bool IsGPU = T.isAMDGPU() || T.isNVPTX();
-  llvm::Regex TargetRegex(IC.Base.TargetRegex);
+  llvm::Regex TargetRegex(IC.Base.EnabledTargetRegex);
   std::string ErrMsg;
 
   if (!TargetRegex.isValid(ErrMsg)) {
     errs() << "WARNING: failed to parse TargetRegex: " << ErrMsg << "\n";
+    return false;
   }
 
-  return ((IsGPU && IC.Base.InstrumentGpu) ||
-          (!IsGPU && IC.Base.InstrumentHost)) &&
+  return ((IsGPU && IC.Base.EnabledTargetGPU) ||
+          (!IsGPU && IC.Base.EnabledTargetHost)) &&
          TargetRegex.match(TripleStr);
 }
 

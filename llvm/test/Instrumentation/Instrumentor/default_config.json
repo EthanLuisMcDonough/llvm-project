@@ -3,9 +3,9 @@
     "RuntimeName": "__instrumentor_",
     "PrintRuntimeSignatures": true,
     "StubRuntimePath": "rt.c",
-    "TargetRegex": ".*",
-    "InstrumentHost": true,
-    "InstrumentGpu": true
+    "EnabledTargetRegex": ".*",
+    "EnabledTargetHost": true,
+    "EnabledTargetGPU": true
   },
   "alloca": {
     "EnabledPost": true,

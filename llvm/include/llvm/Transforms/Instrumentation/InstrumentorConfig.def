@@ -23,11 +23,16 @@ CVALUE(Base, bool, PrintRuntimeSignatures, true)
 
 CVALUE(Base, std::string, StubRuntimePath, "rt.c")
 
-CVALUE(Base, std::string, TargetRegex, ".*")
+/// Regex string that is matched against the current target.
+/// This target option has the highest precedence. If the target
+/// string doesn't match the regex, it won't be instrumented.
+CVALUE(Base, std::string, EnabledTargetRegex, ".*")
 
-CVALUE(Base, bool, InstrumentHost, true)
+/// Instrument non-GPU targets
+CVALUE(Base, bool, EnabledTargetHost, true)
 
-CVALUE(Base, bool, InstrumentGpu, true)
+/// Instrument GPU targets (AMDGPU and NVPTX)
+CVALUE(Base, bool, EnabledTargetGPU, true)
 
 SECTION_END(Base)
 ///}
