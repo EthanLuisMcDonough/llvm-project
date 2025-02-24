@@ -184,38 +184,42 @@ bool readInstrumentorConfigFromJSON(InstrumentationConfig &IConf) {
     BCOMap[BO->Name] = BO;
 
   SmallPtrSet<InstrumentationOpportunity *, 32> SeenIOs;
+
+  const auto *BOJson = Config->getObject("configuration");
+  if (BOJson) {
+    for (auto &ObjIt : *BOJson) {
+      if (auto *BO = BCOMap.lookup(ObjIt.first)) {
+        switch (BO->Kind) {
+        case BaseConfigurationOpportunity::STRING:
+          if (auto V = ObjIt.second.getAsString()) {
+            BO->setString(IConf.SS.save(*V));
+          } else
+            errs() << "WARNING: configuration key '" << ObjIt.first
+                   << "' expects a string, value ignored\n";
+          break;
+        case BaseConfigurationOpportunity::BOOLEAN:
+          if (auto V = ObjIt.second.getAsBoolean())
+            BO->setBool(*V);
+          else
+            errs() << "WARNING: configuration key '" << ObjIt.first
+                   << "' expects a boolean, value ignored\n";
+          break;
+        }
+      } else if (!StringRef(ObjIt.first).ends_with(".description")) {
+        errs() << "WARNING: configuration key not found and ignored: "
+               << ObjIt.first << "\n";
+      }
+    }
+  }
+
   for (auto &It : *Config) {
     auto *Obj = It.second.getAsObject();
     if (!Obj) {
       errs() << "WARNING: malformed JSON configuration, expected an object.\n";
       continue;
     }
-    if (It.first == "configuration") {
-      for (auto &ObjIt : *Obj) {
-        if (auto *BO = BCOMap.lookup(ObjIt.first)) {
-          switch (BO->Kind) {
-          case BaseConfigurationOpportunity::STRING:
-            if (auto V = ObjIt.second.getAsString()) {
-              BO->setString(IConf.SS.save(*V));
-            } else
-              errs() << "WARNING: configuration key '" << ObjIt.first
-                     << "' expects a string, value ignored\n";
-            break;
-          case BaseConfigurationOpportunity::BOOLEAN:
-            if (auto V = ObjIt.second.getAsBoolean())
-              BO->setBool(*V);
-            else
-              errs() << "WARNING: configuration key '" << ObjIt.first
-                     << "' expects a boolean, value ignored\n";
-            break;
-          }
-        } else if (!StringRef(ObjIt.first).ends_with(".description")) {
-          errs() << "WARNING: configuration key not found and ignored: "
-                 << ObjIt.first << "\n";
-        }
-      }
+    if (It.first == "configuration")
       continue;
-    }
 
     auto &IChoiceMap =
         IConf.IChoices[InstrumentationLocation::getKindFromStr(It.first)];
@@ -244,7 +248,10 @@ bool readInstrumentorConfigFromJSON(InstrumentationConfig &IConf) {
       }
       IO->Enabled = ValueMap["enabled"];
       for (auto &IRArg : IO->IRTArgs) {
-        IRArg.Enabled = ValueMap[IRArg.Name];
+        if (IRArg.Name == "call_id" && !ValueMap.contains("call_id"))
+          IRArg.Enabled = IConf.AddCallCounters->getBool();
+        else
+          IRArg.Enabled = ValueMap[IRArg.Name];
         if (!ReplaceMap.lookup(IRArg.Name)) {
           IRArg.Flags &= ~IRTArg::REPLACABLE;
           IRArg.Flags &= ~IRTArg::REPLACABLE_CUSTOM;
@@ -828,7 +835,13 @@ void InstrumentationConfig::populate(InstrumentorIRBuilderTy &IIRB) {
   ICmpIO::populate(*this, IIRB.Ctx);
 }
 
-void InstrumentationConfig::addChoice(InstrumentationOpportunity &IO) {
+void InstrumentationConfig::addChoice(InstrumentationOpportunity &IO,
+                                      LLVMContext &Ctx) {
+  IO.IRTArgs.push_back(IRTArg(
+      IntegerType::getInt64Ty(Ctx), "call_id",
+      "A unique ID associated with the given function call", IRTArg::NONE,
+      InstrumentationOpportunity::getCounterId, nullptr, false));
+
   auto *&ICPtr = IChoices[IO.getLocationKind()][IO.getName()];
   if (ICPtr && IO.getLocationKind() != InstrumentationLocation::SPECIAL_VALUE) {
     errs() << "WARNING: registered two instrumentation opportunities for the "
@@ -836,6 +849,11 @@ void InstrumentationConfig::addChoice(InstrumentationOpportunity &IO) {
            << ICPtr->getName() << " vs " << IO.getName() << ")!\n";
   }
   ICPtr = &IO;
+}
+
+void InstrumentationConfig::addChoice(InstrumentationOpportunity &IO,
+                                      InstrumentorIRBuilderTy &IIRB) {
+  addChoice(IO, IIRB.Ctx);
 }
 
 Value *
@@ -911,6 +929,13 @@ Value *InstrumentationConfig::getLoopValueRange(Value &V,
       return LVR = Constant::getNullValue(LVRIO->getRetTy(IIRB.Ctx));
   }
   return LVR;
+}
+
+Value *InstrumentationOpportunity::getCounterId(Value &V, Type &Ty,
+                                                InstrumentationConfig &IConf,
+                                                InstrumentorIRBuilderTy &IIRB) {
+  static unsigned ID = 0;
+  return getCI(&Ty, ++ID);
 }
 
 Value *InstrumentationOpportunity::forceCast(Value &V, Type &Ty,

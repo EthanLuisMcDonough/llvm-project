@@ -295,7 +295,7 @@ struct BranchConditionIO : public InstructionIO<Instruction::Br> {
                    InstrumentorIRBuilderTy &IIRB) {
                  return getArguments(V, Ty, IConf, IIRB);
                }));
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, Ctx);
   }
 
   static uint32_t BranchConditionNo;

@@ -405,6 +405,8 @@ struct InstrumentationConfig {
     DemangleFunctionNames = BaseConfigurationOpportunity::getBoolOption(
         *this, "demangle_function_names",
         "Demangle functions names passed to the runtime.", true);
+    AddCallCounters = BaseConfigurationOpportunity::getBoolOption(
+        *this, "default_call_id", "Enable call IDs by default", false);
   }
 
   bool ReadConfig = true;
@@ -425,11 +427,13 @@ struct InstrumentationConfig {
   BaseConfigurationOpportunity *RuntimePrefix;
   BaseConfigurationOpportunity *RuntimeStubsFile;
   BaseConfigurationOpportunity *DemangleFunctionNames;
+  BaseConfigurationOpportunity *AddCallCounters;
 
   EnumeratedArray<StringMap<InstrumentationOpportunity *>,
                   InstrumentationLocation::KindTy>
       IChoices;
-  void addChoice(InstrumentationOpportunity &IO);
+  void addChoice(InstrumentationOpportunity &IO, LLVMContext &Ctx);
+  void addChoice(InstrumentationOpportunity &IO, InstrumentorIRBuilderTy &IIRB);
 
   template <typename Ty, typename... ArgsTy>
   static Ty *allocate(ArgsTy &&...Args) {
@@ -517,6 +521,16 @@ struct InstrumentationOpportunity {
   CallbackTy CB = nullptr;
 
   HoistKindTy HoistKind = DO_NOT_HOIST;
+
+  static Value *getCounterId(Value &V, Type &Ty, InstrumentationConfig &IConf,
+                             InstrumentorIRBuilderTy &IIRB);
+
+  inline void addCounterId(InstrumentationConfig &IConf, LLVMContext &Ctx) {
+    IRTArgs.push_back(IRTArg(
+        IntegerType::getInt64Ty(Ctx), "call_id",
+        "A unique ID associated with the given function call", IRTArg::NONE,
+        InstrumentationOpportunity::getCounterId, nullptr, false));
+  }
 };
 
 template <unsigned Opcode>
@@ -554,7 +568,7 @@ struct AllocaIO : public InstructionIO<Instruction::Alloca> {
                              "The allocation alignment.", IRTArg::NONE,
                              getAlignment));
 
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, Ctx);
   }
 
   static Value *getSize(Value &V, Type &Ty, InstrumentationConfig &IConf,
@@ -646,7 +660,7 @@ struct StoreIO : public InstructionIO<Instruction::Store> {
                                "Flag indicating a volatile store.",
                                IRTArg::NONE, isVolatile));
 
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, IIRB);
   }
 
   static Value *getPointer(Value &V, Type &Ty, InstrumentationConfig &IConf,
@@ -760,7 +774,7 @@ struct LoadIO : public InstructionIO<Instruction::Load> {
                                "Flag indicating a volatile load.", IRTArg::NONE,
                                isVolatile));
 
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, IIRB);
   }
 
   static Value *getPointer(Value &V, Type &Ty, InstrumentationConfig &IConf,
@@ -871,7 +885,7 @@ struct CallIO : public InstructionIO<Instruction::Call> {
       IRTArgs.push_back(IRTArg(IntegerType::getInt8Ty(Ctx), "is_definition",
                                "Flag to indicate calls to definitions.",
                                IRTArg::NONE, isDefinition));
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, Ctx);
   }
 
   static Value *getCallee(Value &V, Type &Ty, InstrumentationConfig &IConf,
@@ -907,7 +921,7 @@ struct UnreachableIO : public InstructionIO<Instruction::Unreachable> {
   virtual ~UnreachableIO() {};
 
   void init(InstrumentationConfig &IConf, LLVMContext &Ctx) {
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, Ctx);
   }
 
   static void populate(InstrumentationConfig &IConf, LLVMContext &Ctx) {
@@ -930,7 +944,7 @@ struct BranchIO : public InstructionIO<Instruction::Br> {
     IRTArgs.push_back(IRTArg(PointerType::getInt64Ty(Ctx), "num_successors",
                              "Number of branch successors.", IRTArg::NONE,
                              getNumSuccessors));
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, Ctx);
   }
 
   static void populate(InstrumentationConfig &IConf, LLVMContext &Ctx) {
@@ -971,7 +985,7 @@ struct ICmpIO : public InstructionIO<Instruction::ICmp> {
     IRTArgs.push_back(IRTArg(IntegerType::getInt64Ty(Ctx), "rhs",
                              "Right hand side of an integer compare.",
                              IRTArg::POTENTIALLY_INDIRECT, getRHS));
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, Ctx);
   }
 
   static Value *getCmpPredicate(Value &V, Type &Ty,
@@ -1006,7 +1020,7 @@ struct PtrToIntIO : public InstructionIO<Instruction::PtrToInt> {
           IntegerType::getInt64Ty(Ctx), "value", "Result of the ptr to int.",
           IRTArg::REPLACABLE | IRTArg::POTENTIALLY_INDIRECT, getValue,
           replaceValue));
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, Ctx);
   }
 
   static Value *getPtr(Value &V, Type &Ty, InstrumentationConfig &IConf,
@@ -1036,7 +1050,7 @@ struct BasePointerIO : public InstrumentationOpportunity {
         IntegerType::getInt32Ty(Ctx), "base_pointer_kind",
         "The base pointer kind (argument, global, instruction, unknown).",
         IRTArg::NONE, getPointerKind));
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, Ctx);
   }
 
   static Value *getPointerKind(Value &V, Type &Ty, InstrumentationConfig &IConf,
@@ -1072,7 +1086,7 @@ struct LoopValueRangeIO : public InstrumentationOpportunity {
     IRTArgs.push_back(IRTArg(IIRB.Int64Ty, "final_loop_val",
                              "The value in the last loop iteration.",
                              IRTArg::NONE, getFinalLoopValue));
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, IIRB);
   }
 
   static Value *getInitialLoopValue(Value &V, Type &Ty,
@@ -1131,7 +1145,7 @@ struct FunctionIO : public InstrumentationOpportunity {
                              "Description of the arguments.",
                              IRTArg::REPLACABLE_CUSTOM, getArguments,
                              setArguments));
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, Ctx);
   }
 
   static Value *getFunctionAddress(Value &V, Type &Ty,
@@ -1171,7 +1185,7 @@ struct ModuleIO : public InstrumentationOpportunity {
     IRTArgs.push_back(IRTArg(PointerType::getUnqual(Ctx), "name",
                              "The target triple.", IRTArg::STRING,
                              getTargetTriple));
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, Ctx);
   }
 
   static Value *getModuleName(Value &V, Type &Ty, InstrumentationConfig &IConf,
@@ -1214,7 +1228,7 @@ struct GlobalIO : public InstrumentationOpportunity {
     IRTArgs.push_back(IRTArg(IntegerType::getInt8Ty(Ctx), "is_constant",
                              "Flag to indicate constant globals.", IRTArg::NONE,
                              isConstant));
-    IConf.addChoice(*this);
+    IConf.addChoice(*this, Ctx);
   }
 
   static Value *getAddress(Value &V, Type &Ty, InstrumentationConfig &IConf,

@@ -1,0 +1,17 @@
+{
+  "configuration": {
+    "default_call_id": true
+  },
+  "instruction_pre": {
+    "load": {
+      "enabled": true
+    },
+    "alloca": {
+      "enabled": true
+    },
+    "store": {
+      "enabled": true,
+      "call_id": false
+    }
+  }
+}
