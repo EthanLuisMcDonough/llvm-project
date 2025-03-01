@@ -11,7 +11,7 @@ define dso_local i32 @main(i32 noundef %0, ptr noundef %1) {
 ; CHECK-NEXT:    store i32 [[TMP0]], ptr [[TMP5]], align 4
 ; CHECK-NEXT:    [[TMP6:%.*]] = getelementptr inbounds nuw <{ i32, i32, [4 x i8], i32, i32, i32, ptr }>, ptr [[TMP3]], i32 0, i32 6
 ; CHECK-NEXT:    store ptr [[TMP1]], ptr [[TMP6]], align 8
-; CHECK-NEXT:    call void @__lightsan_pre_function(ptr @__lightsan_.str, i32 2, ptr [[TMP3]])
+; CHECK-NEXT:    call void @__lightsan_pre_function(ptr @__lightsan_.str, i32 2, ptr [[TMP3]], i32 1)
 ; CHECK-NEXT:    [[TMP7:%.*]] = getelementptr inbounds i8, ptr [[TMP3]], i32 8
 ; CHECK-NEXT:    [[TMP8:%.*]] = load i32, ptr [[TMP7]], align 4
 ; CHECK-NEXT:    [[TMP9:%.*]] = getelementptr inbounds i8, ptr [[TMP3]], i32 24

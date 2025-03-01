@@ -7,7 +7,7 @@ define ptr @foo() {
 ; CHECK-LABEL: define ptr @foo() {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
 ; CHECK-NEXT:    [[A1:%.*]] = alloca ptr, align 8
-; CHECK-NEXT:    [[A:%.*]] = call ptr @__lightsan_post_alloca(ptr [[A1]], i64 8)
+; CHECK-NEXT:    [[A:%.*]] = call ptr @__lightsan_post_alloca(ptr [[A1]], i64 8, i32 -1)
 ; CHECK-NEXT:    ret ptr [[A]]
 ;
 entry:
@@ -19,9 +19,9 @@ define ptr @bar(i1 %c) {
 ; CHECK-SAME: i1 [[C:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
 ; CHECK-NEXT:    [[A:%.*]] = alloca i32, align 4
-; CHECK-NEXT:    [[TMP8:%.*]] = call ptr @__lightsan_post_alloca(ptr [[A]], i64 4)
+; CHECK-NEXT:    [[TMP8:%.*]] = call ptr @__lightsan_post_alloca(ptr [[A]], i64 4, i32 -2)
 ; CHECK-NEXT:    [[B:%.*]] = alloca i32, i32 5, align 4
-; CHECK-NEXT:    [[TMP11:%.*]] = call ptr @__lightsan_post_alloca(ptr [[B]], i64 20)
+; CHECK-NEXT:    [[TMP11:%.*]] = call ptr @__lightsan_post_alloca(ptr [[B]], i64 20, i32 -3)
 ; CHECK-NEXT:    [[S:%.*]] = select i1 [[C]], ptr [[TMP8]], ptr [[TMP11]]
 ; CHECK-NEXT:    ret ptr [[S]]
 ;
@@ -38,7 +38,7 @@ define ptr @baz(i32 %v) {
 ; CHECK-NEXT:    [[A1:%.*]] = alloca ptr, i32 [[V]], align 8
 ; CHECK-NEXT:    [[TMP0:%.*]] = zext i32 [[V]] to i64
 ; CHECK-NEXT:    [[TMP1:%.*]] = mul i64 8, [[TMP0]]
-; CHECK-NEXT:    [[A:%.*]] = call ptr @__lightsan_post_alloca(ptr [[A1]], i64 [[TMP1]])
+; CHECK-NEXT:    [[A:%.*]] = call ptr @__lightsan_post_alloca(ptr [[A1]], i64 [[TMP1]], i32 -4)
 ; CHECK-NEXT:    ret ptr [[A]]
 ;
 entry:
@@ -51,7 +51,7 @@ define ptr @fizz() {
 ; CHECK-NEXT:    [[A1:%.*]] = alloca <vscale x 2 x i32>, align 8
 ; CHECK-NEXT:    [[TMP0:%.*]] = getelementptr <vscale x 2 x i32>, ptr null, i32 1
 ; CHECK-NEXT:    [[TMP1:%.*]] = ptrtoint ptr [[TMP0]] to i64
-; CHECK-NEXT:    [[A:%.*]] = call ptr @__lightsan_post_alloca(ptr [[A1]], i64 [[TMP1]])
+; CHECK-NEXT:    [[A:%.*]] = call ptr @__lightsan_post_alloca(ptr [[A1]], i64 [[TMP1]], i32 -5)
 ; CHECK-NEXT:    ret ptr [[A]]
 ;
 entry:

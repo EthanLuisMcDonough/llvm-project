@@ -8,12 +8,12 @@ define noundef zeroext i1 @_Z15store_load_boolPbb(ptr captures(none) noundef ini
 ; CHECK-LABEL: define noundef zeroext i1 @_Z15store_load_boolPbb(
 ; CHECK-SAME: ptr noundef captures(none) initializes((0, 1)) [[A:%.*]], i1 noundef zeroext [[VAL:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0)
+; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0, i32 -1)
 ; CHECK-NEXT:    [[STOREDV:%.*]] = zext i1 [[VAL]] to i8
-; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 1)
+; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 1, i32 1)
 ; CHECK-NEXT:    store i8 [[STOREDV]], ptr [[TMP1]], align 1
 ; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw i8, ptr [[A]], i64 1
-; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 1)
+; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 1, i32 2)
 ; CHECK-NEXT:    [[TMP3:%.*]] = load i8, ptr [[TMP2]], align 1
 ; CHECK-NEXT:    [[LOADEDV2:%.*]] = trunc nuw i8 [[TMP3]] to i1
 ; CHECK-NEXT:    ret i1 [[LOADEDV2]]
@@ -32,11 +32,11 @@ define noundef signext i8 @_Z15store_load_charPcc(ptr captures(none) noundef ini
 ; CHECK-LABEL: define noundef signext i8 @_Z15store_load_charPcc(
 ; CHECK-SAME: ptr noundef captures(none) initializes((0, 1)) [[A:%.*]], i8 noundef signext [[VAL:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0)
-; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 1)
+; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0, i32 -3)
+; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 1, i32 3)
 ; CHECK-NEXT:    store i8 [[VAL]], ptr [[TMP1]], align 1
 ; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw i8, ptr [[A]], i64 1
-; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 1)
+; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 1, i32 4)
 ; CHECK-NEXT:    [[TMP3:%.*]] = load i8, ptr [[TMP2]], align 1
 ; CHECK-NEXT:    ret i8 [[TMP3]]
 ;
@@ -52,11 +52,11 @@ define noundef signext i16 @_Z16store_load_shortPss(ptr captures(none) noundef i
 ; CHECK-LABEL: define noundef signext i16 @_Z16store_load_shortPss(
 ; CHECK-SAME: ptr noundef captures(none) initializes((0, 2)) [[A:%.*]], i16 noundef signext [[VAL:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0)
-; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 2)
+; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0, i32 -5)
+; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 2, i32 5)
 ; CHECK-NEXT:    store i16 [[VAL]], ptr [[TMP1]], align 2
 ; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw i8, ptr [[A]], i64 2
-; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 2)
+; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 2, i32 6)
 ; CHECK-NEXT:    [[TMP3:%.*]] = load i16, ptr [[TMP2]], align 2
 ; CHECK-NEXT:    ret i16 [[TMP3]]
 ;
@@ -72,11 +72,11 @@ define noundef i32 @_Z14store_load_intPii(ptr captures(none) noundef initializes
 ; CHECK-LABEL: define noundef i32 @_Z14store_load_intPii(
 ; CHECK-SAME: ptr noundef captures(none) initializes((0, 4)) [[A:%.*]], i32 noundef [[VAL:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0)
-; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 4)
+; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0, i32 -7)
+; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 4, i32 7)
 ; CHECK-NEXT:    store i32 [[VAL]], ptr [[TMP1]], align 4
 ; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw i8, ptr [[A]], i64 4
-; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 4)
+; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 4, i32 8)
 ; CHECK-NEXT:    [[TMP3:%.*]] = load i32, ptr [[TMP2]], align 4
 ; CHECK-NEXT:    ret i32 [[TMP3]]
 ;
@@ -92,11 +92,11 @@ define noundef i64 @_Z15store_load_longPll(ptr captures(none) noundef initialize
 ; CHECK-LABEL: define noundef i64 @_Z15store_load_longPll(
 ; CHECK-SAME: ptr noundef captures(none) initializes((0, 8)) [[A:%.*]], i64 noundef [[VAL:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    [[TMP3:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0)
-; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP3]], i32 8)
+; CHECK-NEXT:    [[TMP3:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0, i32 -9)
+; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP3]], i32 8, i32 9)
 ; CHECK-NEXT:    store i64 [[VAL]], ptr [[TMP0]], align 8
 ; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw i8, ptr [[A]], i64 8
-; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP3]], i32 8)
+; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP3]], i32 8, i32 10)
 ; CHECK-NEXT:    [[TMP2:%.*]] = load i64, ptr [[TMP1]], align 8
 ; CHECK-NEXT:    ret i64 [[TMP2]]
 ;
@@ -112,11 +112,11 @@ define noundef i128 @_Z20store_load_long_longPxx(ptr captures(none) noundef init
 ; CHECK-LABEL: define noundef i128 @_Z20store_load_long_longPxx(
 ; CHECK-SAME: ptr noundef captures(none) initializes((0, 16)) [[A:%.*]], i128 noundef [[VAL:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0)
-; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 16)
+; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0, i32 -11)
+; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 16, i32 11)
 ; CHECK-NEXT:    store i128 [[VAL]], ptr [[TMP1]], align 8
 ; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw i8, ptr [[A]], i64 16
-; CHECK-NEXT:    [[TMP4:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 16)
+; CHECK-NEXT:    [[TMP4:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 16, i32 12)
 ; CHECK-NEXT:    [[TMP3:%.*]] = load i128, ptr [[TMP4]], align 8
 ; CHECK-NEXT:    ret i128 [[TMP3]]
 ;
@@ -132,11 +132,11 @@ define noundef float @_Z16store_load_floatPff(ptr captures(none) noundef initial
 ; CHECK-LABEL: define noundef float @_Z16store_load_floatPff(
 ; CHECK-SAME: ptr noundef captures(none) initializes((0, 4)) [[A:%.*]], float noundef [[VAL:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0)
-; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 4)
+; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0, i32 -13)
+; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 4, i32 13)
 ; CHECK-NEXT:    store float [[VAL]], ptr [[TMP2]], align 4
 ; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw i8, ptr [[A]], i64 4
-; CHECK-NEXT:    [[TMP3:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 4)
+; CHECK-NEXT:    [[TMP3:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 4, i32 14)
 ; CHECK-NEXT:    [[TMP4:%.*]] = load float, ptr [[TMP3]], align 4
 ; CHECK-NEXT:    ret float [[TMP4]]
 ;
@@ -152,11 +152,11 @@ define noundef double @_Z17store_load_doublePdd(ptr captures(none) noundef initi
 ; CHECK-LABEL: define noundef double @_Z17store_load_doublePdd(
 ; CHECK-SAME: ptr noundef captures(none) initializes((0, 8)) [[A:%.*]], double noundef [[VAL:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0)
-; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 8)
+; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0, i32 -15)
+; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP0]], i32 8, i32 15)
 ; CHECK-NEXT:    store double [[VAL]], ptr [[TMP1]], align 8
 ; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw i8, ptr [[A]], i64 8
-; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 8)
+; CHECK-NEXT:    [[TMP2:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP0]], i32 8, i32 16)
 ; CHECK-NEXT:    [[TMP3:%.*]] = load double, ptr [[TMP2]], align 8
 ; CHECK-NEXT:    ret double [[TMP3]]
 ;
@@ -172,11 +172,11 @@ define noundef x86_fp80 @_Z22store_load_long_doublePee(ptr captures(none) nounde
 ; CHECK-LABEL: define noundef x86_fp80 @_Z22store_load_long_doublePee(
 ; CHECK-SAME: ptr noundef captures(none) initializes((0, 10)) [[A:%.*]], x86_fp80 noundef [[VAL:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*:]]
-; CHECK-NEXT:    [[TMP3:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0)
-; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP3]], i32 10)
+; CHECK-NEXT:    [[TMP3:%.*]] = call ptr @__lightsan_post_base_pointer_info(ptr [[A]], i32 0, i32 -17)
+; CHECK-NEXT:    [[TMP1:%.*]] = call ptr @__lightsan_pre_store(ptr [[A]], ptr [[TMP3]], i32 10, i32 17)
 ; CHECK-NEXT:    store x86_fp80 [[VAL]], ptr [[TMP1]], align 16
 ; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds nuw i8, ptr [[A]], i64 16
-; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP3]], i32 10)
+; CHECK-NEXT:    [[TMP0:%.*]] = call ptr @__lightsan_pre_load(ptr [[ARRAYIDX]], ptr [[TMP3]], i32 10, i32 18)
 ; CHECK-NEXT:    [[TMP2:%.*]] = load x86_fp80, ptr [[TMP0]], align 16
 ; CHECK-NEXT:    ret x86_fp80 [[TMP2]]
 ;

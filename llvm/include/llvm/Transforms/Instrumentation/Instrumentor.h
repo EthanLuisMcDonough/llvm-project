@@ -200,10 +200,10 @@ struct IRTArg {
 
   IRTArg(Type *Ty, StringRef Name, StringRef Description, unsigned Flags,
          GetterCallbackTy GetterCB, SetterCallbackTy SetterCB = nullptr,
-         bool Enabled = true)
+         bool Enabled = true, bool NoCache = false)
       : Enabled(Enabled), Ty(Ty), Name(Name), Description(Description),
         Flags(Flags), GetterCB(std::move(GetterCB)),
-        SetterCB(std::move(SetterCB)) {}
+        SetterCB(std::move(SetterCB)), NoCache(NoCache) {}
 
   bool Enabled;
   Type *Ty;
@@ -212,6 +212,7 @@ struct IRTArg {
   unsigned Flags;
   GetterCallbackTy GetterCB;
   SetterCallbackTy SetterCB;
+  bool NoCache;
 };
 
 struct InstrumentationCaches {
@@ -528,6 +529,19 @@ struct InstrumentationOpportunity {
   CallbackTy CB = nullptr;
 
   HoistKindTy HoistKind = DO_NOT_HOIST;
+
+  static Value *getIdPre(Value &V, Type &Ty, InstrumentationConfig &IConf,
+                         InstrumentorIRBuilderTy &IIRB);
+  static Value *getIdPost(Value &V, Type &Ty, InstrumentationConfig &IConf,
+                          InstrumentorIRBuilderTy &IIRB);
+
+  void addCommonArgs(InstrumentationConfig &IConf, LLVMContext &Ctx) {
+    const auto CB = IP.isPRE() ? getIdPre : getIdPost;
+    IRTArgs.push_back(
+        IRTArg(IntegerType::getInt32Ty(Ctx), "id",
+               "A unique ID associated with the given instrumentor call",
+               IRTArg::NONE, CB, nullptr, true, true));
+  }
 };
 
 template <unsigned Opcode>
@@ -576,7 +590,7 @@ struct AllocaIO : public InstructionIO<Instruction::Alloca> {
       IRTArgs.push_back(IRTArg(IntegerType::getInt64Ty(Ctx), "alignment",
                                "The allocation alignment.", IRTArg::NONE,
                                getAlignment));
-
+    addCommonArgs(IConf, Ctx);
     IConf.addChoice(*this);
   }
 
@@ -668,7 +682,7 @@ struct StoreIO : public InstructionIO<Instruction::Store> {
       IRTArgs.push_back(IRTArg(IIRB.Int8Ty, "is_volatile",
                                "Flag indicating a volatile store.",
                                IRTArg::NONE, isVolatile));
-
+    addCommonArgs(IConf, IIRB.Ctx);
     IConf.addChoice(*this);
   }
 
@@ -782,7 +796,7 @@ struct LoadIO : public InstructionIO<Instruction::Load> {
       IRTArgs.push_back(IRTArg(IIRB.Int8Ty, "is_volatile",
                                "Flag indicating a volatile load.", IRTArg::NONE,
                                isVolatile));
-
+    addCommonArgs(IConf, IIRB.Ctx);
     IConf.addChoice(*this);
   }
 
@@ -894,6 +908,7 @@ struct CallIO : public InstructionIO<Instruction::Call> {
       IRTArgs.push_back(IRTArg(IntegerType::getInt8Ty(Ctx), "is_definition",
                                "Flag to indicate calls to definitions.",
                                IRTArg::NONE, isDefinition));
+    addCommonArgs(IConf, Ctx);
     IConf.addChoice(*this);
   }
 
@@ -930,6 +945,7 @@ struct UnreachableIO : public InstructionIO<Instruction::Unreachable> {
   virtual ~UnreachableIO() {};
 
   void init(InstrumentationConfig &IConf, LLVMContext &Ctx) {
+    addCommonArgs(IConf, Ctx);
     IConf.addChoice(*this);
   }
 
@@ -953,6 +969,7 @@ struct BranchIO : public InstructionIO<Instruction::Br> {
     IRTArgs.push_back(IRTArg(PointerType::getInt64Ty(Ctx), "num_successors",
                              "Number of branch successors.", IRTArg::NONE,
                              getNumSuccessors));
+    addCommonArgs(IConf, Ctx);
     IConf.addChoice(*this);
   }
 
@@ -994,6 +1011,7 @@ struct ICmpIO : public InstructionIO<Instruction::ICmp> {
     IRTArgs.push_back(IRTArg(IntegerType::getInt64Ty(Ctx), "rhs",
                              "Right hand side of an integer compare.",
                              IRTArg::POTENTIALLY_INDIRECT, getRHS));
+    addCommonArgs(IConf, Ctx);
     IConf.addChoice(*this);
   }
 
@@ -1029,6 +1047,7 @@ struct PtrToIntIO : public InstructionIO<Instruction::PtrToInt> {
           IntegerType::getInt64Ty(Ctx), "value", "Result of the ptr to int.",
           IRTArg::REPLACABLE | IRTArg::POTENTIALLY_INDIRECT, getValue,
           replaceValue));
+    addCommonArgs(IConf, Ctx);
     IConf.addChoice(*this);
   }
 
@@ -1059,6 +1078,8 @@ struct BasePointerIO : public InstrumentationOpportunity {
         IntegerType::getInt32Ty(Ctx), "base_pointer_kind",
         "The base pointer kind (argument, global, instruction, unknown).",
         IRTArg::NONE, getPointerKind));
+
+    addCommonArgs(IConf, Ctx);
     IConf.addChoice(*this);
   }
 
@@ -1095,6 +1116,7 @@ struct LoopValueRangeIO : public InstrumentationOpportunity {
     IRTArgs.push_back(IRTArg(IIRB.Int64Ty, "final_loop_val",
                              "The value in the last loop iteration.",
                              IRTArg::NONE, getFinalLoopValue));
+    addCommonArgs(IConf, IIRB.Ctx);
     IConf.addChoice(*this);
   }
 
@@ -1173,6 +1195,7 @@ struct FunctionIO : public InstrumentationOpportunity {
                                Config.ReplaceArguments ? IRTArg::REPLACABLE_CUSTOM : IRTArg::NONE,
                                std::bind(&FunctionIO::getArguments, this, _1, _2, _3, _4),
                                std::bind(&FunctionIO::setArguments, this, _1, _2, _3, _4)));
+    addCommonArgs(IConf, Ctx);
     IConf.addChoice(*this);
   }
 
@@ -1213,6 +1236,7 @@ struct ModuleIO : public InstrumentationOpportunity {
     IRTArgs.push_back(IRTArg(PointerType::getUnqual(Ctx), "name",
                              "The target triple.", IRTArg::STRING,
                              getTargetTriple));
+    addCommonArgs(IConf, Ctx);
     IConf.addChoice(*this);
   }
 
@@ -1256,6 +1280,7 @@ struct GlobalIO : public InstrumentationOpportunity {
     IRTArgs.push_back(IRTArg(IntegerType::getInt8Ty(Ctx), "is_constant",
                              "Flag to indicate constant globals.", IRTArg::NONE,
                              isConstant));
+    addCommonArgs(IConf, Ctx);
     IConf.addChoice(*this);
   }
 

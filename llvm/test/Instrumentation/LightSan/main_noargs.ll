@@ -4,7 +4,7 @@ target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:
 
 define dso_local i32 @main() {
 ; CHECK-LABEL: define dso_local i32 @main() {
-; CHECK-NEXT:    call void @__lightsan_pre_function(ptr @__lightsan_.str, i32 0, ptr null)
+; CHECK-NEXT:    call void @__lightsan_pre_function(ptr @__lightsan_.str, i32 0, ptr null, i32 1)
 ; CHECK-NEXT:    ret i32 0
 ;
   ret i32 0
