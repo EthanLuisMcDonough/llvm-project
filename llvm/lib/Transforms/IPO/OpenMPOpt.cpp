@@ -51,6 +51,7 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsNVPTX.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/ProfDataUtils.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -967,6 +968,8 @@ struct OpenMPOpt {
       // TODO: This should be folded into buildCustomStateMachine.
       Changed |= rewriteDeviceCodeStateMachine();
 
+      Changed |= pgoLoopTheadCount();
+
       if (remarksEnabled())
         analysisGlobalization();
     } else {
@@ -1061,6 +1064,55 @@ struct OpenMPOpt {
   }
 
 private:
+  bool pgoLoopTheadCount() {
+    const uint64_t PARALLEL_FUNC_INDEX = 5;
+    const uint64_t PARALLEL_THREADS_INDEX = 3;
+    const uint32_t BRANCH_COND_INDEX = 1;
+
+    bool Changed = false;
+    OMPInformationCache::RuntimeFunctionInfo &KernelParallelRFI =
+        OMPInfoCache.RFIs[OMPRTL___kmpc_parallel_51];
+
+    if (!KernelParallelRFI)
+      return Changed;
+
+    for (auto *U : KernelParallelRFI.Declaration->users()) {
+      CallInst *ParallelCall;
+      Function *OutlinedFn;
+      if (!(ParallelCall = dyn_cast<CallInst>(U)) ||
+          !(OutlinedFn = dyn_cast<Function>(
+                ParallelCall->getArgOperand(PARALLEL_FUNC_INDEX))) ||
+          !OutlinedFn->getEntryCount())
+        continue;
+
+      uint32_t CondBranchCounter = 0;
+      int64_t LoopIterations = -1;
+      for (const auto &Block : *OutlinedFn) {
+        const auto *T = Block.getTerminator();
+        const BranchInst *Condition;
+        if (!hasProfMD(*T) || !(Condition = dyn_cast<BranchInst>(T)) ||
+            Condition->isUnconditional())
+          continue;
+
+        if (CondBranchCounter++ == BRANCH_COND_INDEX) {
+          uint64_t TrueWeight, FalseWeight;
+          extractBranchWeights(*T, TrueWeight, FalseWeight);
+          LoopIterations = TrueWeight;
+        }
+      }
+
+      // No count found
+      if (LoopIterations < 0)
+        continue;
+
+      ConstantInt *LoopCountVal =
+          ConstantInt::get(Type::getInt32Ty(M.getContext()), LoopIterations);
+      ParallelCall->setArgOperand(PARALLEL_THREADS_INDEX, LoopCountVal);
+    }
+
+    return Changed;
+  };
+
   /// Merge parallel regions when it is safe.
   bool mergeParallelRegions() {
     const unsigned CallbackCalleeOperand = 2;
