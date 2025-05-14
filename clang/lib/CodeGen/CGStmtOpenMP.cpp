@@ -2206,6 +2206,14 @@ void CodeGenFunction::EmitOMPInnerLoop(
   LoopStack.pop();
   // Emit the fall-through block.
   EmitBlock(LoopExit.getBlock());
+
+  auto *CondTerminator = CondBlock->getTerminator();
+  if (CondTerminator) {
+    auto &Ctx = CGM.getLLVMContext();
+    const auto RoleStr = llvm::MDString::get(Ctx, "omp.inner.for.cond");
+    const auto RoleData = llvm::MDNode::get(Ctx, RoleStr);
+    CondTerminator->setMetadata("omp.role", RoleData);
+  }
 }
 
 bool CodeGenFunction::EmitOMPLinearClauseInit(const OMPLoopDirective &D) {

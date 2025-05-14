@@ -29,6 +29,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/CallGraph.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -58,6 +59,7 @@
 #include "llvm/Transforms/IPO/Attributor.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/CallGraphUpdater.h"
+#include "llvm/Transforms/Utils/LoopUtils.h"
 
 #include <algorithm>
 #include <optional>
@@ -939,9 +941,10 @@ struct OpenMPOpt {
 
   OpenMPOpt(SmallVectorImpl<Function *> &SCC, CallGraphUpdater &CGUpdater,
             OptimizationRemarkGetter OREGetter,
-            OMPInformationCache &OMPInfoCache, Attributor &A)
+            OMPInformationCache &OMPInfoCache, Attributor &A,
+            AnalysisGetter &AG)
       : M(*(*SCC.begin())->getParent()), SCC(SCC), CGUpdater(CGUpdater),
-        OREGetter(OREGetter), OMPInfoCache(OMPInfoCache), A(A) {}
+        OREGetter(OREGetter), OMPInfoCache(OMPInfoCache), A(A), AG(AG) {}
 
   /// Check if any remarks are enabled for openmp-opt
   bool remarksEnabled() {
@@ -968,7 +971,7 @@ struct OpenMPOpt {
       // TODO: This should be folded into buildCustomStateMachine.
       Changed |= rewriteDeviceCodeStateMachine();
 
-      Changed |= pgoLoopTheadCount();
+      Changed |= pgoLoopThreadCount();
 
       if (remarksEnabled())
         analysisGlobalization();
@@ -1064,17 +1067,74 @@ struct OpenMPOpt {
   }
 
 private:
-  bool pgoLoopTheadCount() {
+  struct PgoKernelData {
+    std::optional<uint64_t> MinThreads, MaxThreads, MinTeams, MaxTeams;
+    CallBase *CB;
+  };
+
+  bool pgoLoopThreadCount() {
     const uint64_t PARALLEL_FUNC_INDEX = 5;
-    const uint64_t PARALLEL_THREADS_INDEX = 3;
-    const uint32_t BRANCH_COND_INDEX = 1;
 
     bool Changed = false;
     OMPInformationCache::RuntimeFunctionInfo &KernelParallelRFI =
         OMPInfoCache.RFIs[OMPRTL___kmpc_parallel_51];
+    OMPInformationCache::RuntimeFunctionInfo &KernelInitRFI =
+        OMPInfoCache.RFIs[OMPRTL___kmpc_target_init];
+    OMPInformationCache::RuntimeFunctionInfo &StaticFiniRFI =
+        OMPInfoCache.RFIs[OMPRTL___kmpc_distribute_static_fini];
 
-    if (!KernelParallelRFI)
+    if (!KernelParallelRFI || !KernelInitRFI)
       return Changed;
+
+    DenseMap<const Function *, PgoKernelData> KernelPGOThreadCounts;
+
+    for (auto *U : KernelInitRFI.Declaration->users()) {
+      if (auto *InitCall = dyn_cast<CallInst>(U)) {
+        auto *K = getUniqueKernelFor(*InitCall);
+        if (!K)
+          continue;
+        KernelPGOThreadCounts[K] = {std::nullopt, std::nullopt, std::nullopt,
+                                    std::nullopt, InitCall};
+      }
+    }
+
+    // Find min/max teams
+    for (auto *U : StaticFiniRFI.Declaration->users()) {
+      if (auto *InitCall = dyn_cast<CallInst>(U)) {
+        auto *K = getUniqueKernelFor(*InitCall);
+        if (!K)
+          continue;
+
+        auto *CallFunc = InitCall->getFunction();
+
+        const auto &Entry = CallFunc->getEntryBlock();
+        const auto *Terminator = Entry.getTerminator();
+
+        uint64_t TrueWeight, FalseWeight;
+        if (!extractBranchWeights(*Terminator, TrueWeight, FalseWeight))
+          continue;
+
+        auto &CounterPair = KernelPGOThreadCounts[K];
+        const auto Lower = std::min(TrueWeight, FalseWeight);
+        const auto Upper = std::max(TrueWeight, FalseWeight);
+
+        if (Upper % Lower != 0)
+          continue;
+        const auto TeamCount = Upper / Lower + 1;
+
+        if (CounterPair.MinTeams) {
+          CounterPair.MinTeams = std::min(*CounterPair.MinTeams, TeamCount);
+        } else {
+          CounterPair.MinTeams = TeamCount;
+        }
+
+        if (CounterPair.MaxTeams) {
+          CounterPair.MaxTeams = std::max(*CounterPair.MaxTeams, TeamCount);
+        } else {
+          CounterPair.MaxTeams = TeamCount;
+        }
+      }
+    }
 
     for (auto *U : KernelParallelRFI.Declaration->users()) {
       CallInst *ParallelCall;
@@ -1085,29 +1145,91 @@ private:
           !OutlinedFn->getEntryCount())
         continue;
 
-      uint32_t CondBranchCounter = 0;
-      int64_t LoopIterations = -1;
-      for (const auto &Block : *OutlinedFn) {
-        const auto *T = Block.getTerminator();
-        const BranchInst *Condition;
-        if (!hasProfMD(*T) || !(Condition = dyn_cast<BranchInst>(T)) ||
-            Condition->isUnconditional())
-          continue;
+      auto *K = getUniqueKernelFor(*ParallelCall);
+      if (!K)
+        continue;
 
-        if (CondBranchCounter++ == BRANCH_COND_INDEX) {
+      for (const auto &B : *OutlinedFn) {
+        auto Terminator = B.getTerminator();
+        if (Terminator->hasMetadata("omp.role")) {
+          const auto Node = Terminator->getMetadata("omp.role");
+          const auto Role = dyn_cast<MDString>(Node->getOperand(0));
+          if (Role->getString() != "omp.inner.for.cond")
+            continue;
+
           uint64_t TrueWeight, FalseWeight;
-          extractBranchWeights(*T, TrueWeight, FalseWeight);
-          LoopIterations = TrueWeight;
+          if (!extractBranchWeights(*Terminator, TrueWeight, FalseWeight))
+            continue;
+
+          auto &CounterPair = KernelPGOThreadCounts[K];
+
+          if (CounterPair.MinThreads) {
+            CounterPair.MinThreads =
+                std::min(*CounterPair.MinThreads, TrueWeight);
+          } else {
+            CounterPair.MinThreads = TrueWeight;
+          }
+
+          if (CounterPair.MaxThreads) {
+            CounterPair.MaxThreads =
+                std::max(*CounterPair.MaxThreads, TrueWeight);
+          } else {
+            CounterPair.MaxThreads = TrueWeight;
+          }
+
+          break;
         }
       }
 
-      // No count found
-      if (LoopIterations < 0)
-        continue;
+      for (const auto &[Kernel, PgoData] : KernelPGOThreadCounts) {
+        ConstantStruct *KernelEnvC =
+            KernelInfo::getKernelEnvironementFromKernelInitCB(PgoData.CB);
+        ConstantStruct *ConfigC =
+            KernelInfo::getConfigurationFromKernelEnvironment(KernelEnvC);
+        auto *Int32Ty = Type::getInt32Ty(Kernel->getContext());
 
-      ConstantInt *LoopCountVal =
-          ConstantInt::get(Type::getInt32Ty(M.getContext()), LoopIterations);
-      ParallelCall->setArgOperand(PARALLEL_THREADS_INDEX, LoopCountVal);
+        auto *MinTeamsInt =
+            ConfigC->getAggregateElement(KernelInfo::MinTeamsIdx);
+        Constant *MaxTeamsInt =
+            ConfigC->getAggregateElement(KernelInfo::MaxTeamsIdx);
+        Constant *NewConfigC = ConfigC;
+
+        if (PgoData.MinThreads) {
+          llvm::outs() << "Adjusting MinThreads\n";
+          auto *MinThreadsInt = ConstantInt::get(Int32Ty, *PgoData.MinThreads);
+          NewConfigC = ConstantFoldInsertValueInstruction(
+              NewConfigC, MinThreadsInt, {KernelInfo::MinThreadsIdx});
+        }
+
+        if (PgoData.MaxThreads) {
+          llvm::outs() << "Adjusting MaxThreads\n";
+          auto *MaxThreadsInt = ConstantInt::get(Int32Ty, *PgoData.MaxThreads);
+          NewConfigC = ConstantFoldInsertValueInstruction(
+              NewConfigC, MaxThreadsInt, {KernelInfo::MaxThreadsIdx});
+        }
+
+        if (PgoData.MinTeams && MinTeamsInt->isZeroValue()) {
+          llvm::outs() << "Adjusting MinTeams\n";
+          auto *MinTeamsInt = ConstantInt::get(Int32Ty, *PgoData.MinTeams);
+          NewConfigC = ConstantFoldInsertValueInstruction(
+              NewConfigC, MinTeamsInt, {KernelInfo::MinTeamsIdx});
+        }
+
+        if (PgoData.MaxTeams && MaxTeamsInt->isZeroValue()) {
+          llvm::outs() << "Adjusting MaxTeams\n";
+          auto *MaxTeamsInt = ConstantInt::get(Int32Ty, *PgoData.MaxTeams);
+          NewConfigC = ConstantFoldInsertValueInstruction(
+              NewConfigC, MaxTeamsInt, {KernelInfo::MaxTeamsIdx});
+        }
+
+        Constant *NewKernelEnvC = ConstantFoldInsertValueInstruction(
+            KernelEnvC, NewConfigC, {KernelInfo::ConfigurationIdx});
+
+        GlobalVariable *KernelEnvGV =
+            KernelInfo::getKernelEnvironementGVFromKernelInitCB(PgoData.CB);
+        KernelEnvGV->setInitializer(NewKernelEnvC);
+        Changed = true;
+      }
     }
 
     return Changed;
@@ -2094,6 +2216,7 @@ private:
 
   /// Attributor instance.
   Attributor &A;
+  AnalysisGetter &AG;
 
   /// Helper function to run Attributor on SCC.
   bool runAttributor(bool IsModulePass) {
@@ -5865,7 +5988,7 @@ PreservedAnalyses OpenMPOptPass::run(Module &M, ModuleAnalysisManager &AM) {
 
   Attributor A(Functions, InfoCache, AC);
 
-  OpenMPOpt OMPOpt(SCC, CGUpdater, OREGetter, InfoCache, A);
+  OpenMPOpt OMPOpt(SCC, CGUpdater, OREGetter, InfoCache, A, AG);
   Changed |= OMPOpt.run(true);
 
   // Optionally inline device functions for potentially better performance.
@@ -5944,7 +6067,7 @@ PreservedAnalyses OpenMPOptCGSCCPass::run(LazyCallGraph::SCC &C,
 
   Attributor A(Functions, InfoCache, AC);
 
-  OpenMPOpt OMPOpt(SCC, CGUpdater, OREGetter, InfoCache, A);
+  OpenMPOpt OMPOpt(SCC, CGUpdater, OREGetter, InfoCache, A, AG);
   bool Changed = OMPOpt.run(false);
 
   if (PrintModuleAfterOptimizations)
