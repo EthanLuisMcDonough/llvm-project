@@ -9,26 +9,38 @@
 ; RUN: opt < %s -mtriple=x86_64-pc-windows -passes=instrprof -S | FileCheck %s -check-prefix=WINDOWS
 ; RUN: opt < %s -mtriple=powerpc64-ibm-aix-xcoff -passes=instrprof -S | FileCheck %s -check-prefix=AIX
 ; RUN: opt < %s -mtriple=arm-elf -passes=instrprof -S | FileCheck %s -check-prefix=BAREMETAL
+; RUN: opt < %s -mtriple=amdgcn-amd-amdhsa -passes=instrprof -S | FileCheck %s -check-prefix=AMDGPU
 
 @__profn_foo = private constant [3 x i8] c"foo"
 ; MACHO-NOT: __profn_foo
 ; ELF-NOT: __profn_foo
 ; WINDOWS-NOT: __profn_foo
 ; AIX-NOT: __profn_foo
+; AMDGPU-NOT: __profn_foo
 
 ; MACHO: @__profc_foo = private global [1 x i64] zeroinitializer, section "__DATA,__llvm_prf_cnts", align 8
 ; ELF: @__profc_foo = private global [1 x i64] zeroinitializer, section "__llvm_prf_cnts", comdat, align 8
 ; WINDOWS: @__profc_foo = private global [1 x i64] zeroinitializer, section ".lprfc$M", align 8
 ; AIX: @__profc_foo = private global [1 x i64] zeroinitializer, section "__llvm_prf_cnts", align 8
+;; AMDGPU uses contiguous counter allocation with hash-based naming when no CUID
+; AMDGPU: @__profc_all_{{[0-9]+}} = protected addrspace(1) global [{{[0-9]+}} x i64] zeroinitializer, section "__llvm_prf_cnts_{{[0-9]+}}", align 8
+; AMDGPU: @__profu_all_{{[0-9]+}} = protected addrspace(1) global [{{[0-9]+}} x i64] zeroinitializer, section "__llvm_prf_ucnts_{{[0-9]+}}", align 8
 
 ; MACHO: @__profd_foo = private {{.*}}, section "__DATA,__llvm_prf_data,regular,live_support", align 8
 ; ELF: @__profd_foo = private {{.*}}, section "__llvm_prf_data", comdat($__profc_foo), align 8
 ; WINDOWS: @__profd_foo = private global {{.*}}, section ".lprfd$M", align 8
 ; AIX: @__profd_foo = private {{.*}}, section "__llvm_prf_data", align 8
-
 ; ELF: @__llvm_prf_nm = private constant [{{.*}} x i8] c"{{.*}}", section "{{.*}}__llvm_prf_names"{{.*}}, align 1
 ; WINDOWS: @__llvm_prf_nm = private constant [{{.*}} x i8] c"{{.*}}", section "{{.*}}lprfn$M", align 1
 ; AIX: @__llvm_prf_nm = private constant [{{.*}} x i8] c"{{.*}}", section "{{.*}}__llvm_prf_names", align 1
+;; AMDGPU uses CUID-suffixed names section
+; AMDGPU: @__llvm_prf_nm_{{[0-9]+}} = protected addrspace(1) constant [{{.*}} x i8] c"{{.*}}", section "__llvm_prf_names", align 1
+
+;; Check for __llvm_offload_prf_<CUID> structure (replaces start/stop symbols for AMDGPU)
+; AMDGPU: @__llvm_offload_prf_{{[0-9]+}} = addrspace(1) constant { ptr addrspace(1), ptr addrspace(1), ptr addrspace(1), ptr addrspace(1), ptr addrspace(1), ptr addrspace(1), ptr addrspace(1), ptr addrspace(1) }
+
+;; AMDGPU uses per-TU contiguous allocation, so @__profd_foo is an alias
+; AMDGPU: @__profd_foo = protected alias
 
 define void @foo() {
   call void @llvm.instrprof.increment(ptr @__profn_foo, i64 0, i32 1, i32 0)
@@ -36,6 +48,10 @@ define void @foo() {
 }
 
 declare void @llvm.instrprof.increment(ptr, i64, i32, i32)
+
+;; Start/stop symbols are NOT created for AMDGPU with contiguous allocation
+; AMDGPU-NOT: @__start___llvm_prf_cnts
+; AMDGPU-NOT: @__stop___llvm_prf_cnts
 
 ;; Emit registration functions for platforms that don't find the
 ;; symbols by their sections.
@@ -48,6 +64,7 @@ declare void @llvm.instrprof.increment(ptr, i64, i32, i32)
 ; WINDOWS-NOT: define internal void @__llvm_profile_register_functions
 ; AIX-NOT: define internal void @__llvm_profile_register_functions
 ; BAREMETAL-NOT: define internal void @__llvm_profile_register_functions
+; AMDGPU-NOT: define internal void @__llvm_profile_register_functions
 
 ;; PR38340: When dynamic registration is used, we had a bug where we'd register
 ;; something that's not a __profd_* variable.
@@ -60,3 +77,4 @@ declare void @llvm.instrprof.increment(ptr, i64, i32, i32)
 ; WINDOWS-NOT: define internal void @__llvm_profile_init
 ; AIX-NOT: define internal void @__llvm_profile_init
 ; BAREMETAL-NOT: define internal void @__llvm_profile_init
+; AMDGPU-NOT: define internal void @__llvm_profile_init
