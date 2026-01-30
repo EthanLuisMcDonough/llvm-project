@@ -308,14 +308,28 @@ void __llvm_profile_set_dumped(void);
 
 /*!
  * \brief Write custom target-specific profiling data to a separate file.
- * Used by offload PGO.
+ * Used by offload PGO (HIP and OpenMP).
+ *
+ * \param Target Target triple (e.g., "amdgcn-amd-amdhsa")
+ * \param TUSuffix TU index suffix (e.g., "0", "1") or NULL for no suffix
+ * \param DataBegin Start of profile data records
+ * \param DataEnd End of profile data records
+ * \param CountersBegin Start of counter data
+ * \param CountersEnd End of counter data
+ * \param UniformCountersBegin Start of uniform counters (NULL if not used)
+ * \param UniformCountersEnd End of uniform counters (NULL if not used)
+ * \param NamesBegin Start of names data
+ * \param NamesEnd End of names data
+ * \param VersionOverride Profile version override (NULL to use default)
  */
-int __llvm_write_custom_profile(const char *Target,
+int __llvm_write_custom_profile(const char *Target, const char *TUSuffix,
                                 const __llvm_profile_data *DataBegin,
                                 const __llvm_profile_data *DataEnd,
                                 const char *CountersBegin,
-                                const char *CountersEnd, const char *NamesBegin,
-                                const char *NamesEnd,
+                                const char *CountersEnd,
+                                const char *UniformCountersBegin,
+                                const char *UniformCountersEnd,
+                                const char *NamesBegin, const char *NamesEnd,
                                 const uint64_t *VersionOverride);
 
 /*!

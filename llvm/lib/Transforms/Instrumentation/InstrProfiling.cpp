@@ -2904,11 +2904,14 @@ void InstrLowerer::allocateContiguousProfileArrays() {
     return;
   }
 
-  // Get and cache the CUID for consistent section naming
+  // Get and cache the CUID for consistent section naming.
+  // CUID is only present for HIP compilations (__hip_cuid_* variable).
+  // For OpenMP offload, use the standard per-function allocation.
   CachedCUID = getCUIDFromModule(M);
   if (CachedCUID.empty()) {
-    LLVM_DEBUG(llvm::dbgs() << "No CUID found in module, using fallback\n");
-    CachedCUID = std::to_string(std::hash<std::string>{}(M.getName().str()));
+    LLVM_DEBUG(llvm::dbgs() << "No CUID found (not HIP), using standard "
+                               "per-function allocation\n");
+    return;
   }
 
   LLVM_DEBUG(llvm::dbgs() << "Allocating contiguous arrays for CUID="
@@ -2985,7 +2988,7 @@ void InstrLowerer::allocateContiguousProfileArrays() {
   std::string CntsSectionName = "__llvm_prf_cnts_" + CachedCUID;
   ContiguousCnts = new GlobalVariable(
       M, CntsArrayTy, /*isConstant=*/false, GlobalValue::ExternalLinkage,
-      Constant::getNullValue(CntsArrayTy), "__profc_all_" + CachedCUID);
+      Constant::getNullValue(CntsArrayTy), "__llvm_prf_c_" + CachedCUID);
   ContiguousCnts->setSection(CntsSectionName);
   ContiguousCnts->setAlignment(Align(8));
   ContiguousCnts->setVisibility(GlobalValue::ProtectedVisibility);
@@ -3017,7 +3020,7 @@ void InstrLowerer::allocateContiguousProfileArrays() {
 
     ContiguousData = new GlobalVariable(M, DataArrayTy, /*isConstant=*/false,
                                         GlobalValue::ExternalLinkage, nullptr,
-                                        "__profd_all_" + CachedCUID);
+                                        "__llvm_prf_d_" + CachedCUID);
     ContiguousData->setSection(DataSectionName);
     ContiguousData->setAlignment(Align(INSTR_PROF_DATA_ALIGNMENT));
     ContiguousData->setVisibility(GlobalValue::ProtectedVisibility);
@@ -3307,8 +3310,8 @@ void InstrLowerer::createHIPDeviceVariableRegistration() {
   };
 
   // Per-TU contiguous symbols (device side).
-  std::string CntsSym = std::string("__profc_all_") + CUID;
-  std::string DataSym = std::string("__profd_all_") + CUID;
+  std::string CntsSym = std::string("__llvm_prf_c_") + CUID;
+  std::string DataSym = std::string("__llvm_prf_d_") + CUID;
   std::string UCntsSym = std::string("__profu_all_") + CUID;
   std::string NamesSym = std::string(getInstrProfNamesVarName()) + "_" + CUID;
   registerSectionSymbol(CntsSym);

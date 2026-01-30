@@ -11,10 +11,13 @@
 @__profn_kernel2 = private constant [7 x i8] c"kernel2"
 
 ;; Check that contiguous counter array is created with CUID suffix
-; CHECK: @__profc_all_abc123 = protected addrspace(1) global [{{[0-9]+}} x i64] zeroinitializer, section "__llvm_prf_cnts_abc123", align 8
+; CHECK: @__llvm_prf_c_abc123 = protected addrspace(1) global [{{[0-9]+}} x i64] zeroinitializer, section "__llvm_prf_cnts_abc123", align 8
 
 ;; Check that contiguous uniform counter array is created for divergence tracking
 ; CHECK: @__profu_all_abc123 = protected addrspace(1) global [{{[0-9]+}} x i64] zeroinitializer, section "__llvm_prf_ucnts_abc123", align 8
+
+;; Check that contiguous data array is created with CUID suffix
+; CHECK: @__llvm_prf_d_abc123 = protected addrspace(1) global
 
 ;; Check that individual __profc_kernel* symbols are NOT created (contiguous mode)
 ; CHECK-NOT: @__profc_kernel1

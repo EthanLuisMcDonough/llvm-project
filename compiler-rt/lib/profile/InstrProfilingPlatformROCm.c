@@ -277,8 +277,6 @@ static int ProcessDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex) {
     (void)hipGetSymbolAddress(&DevPtr, OffloadSectionShadowVariables[i]);
   }
 
-  char *DeviceFilename = NULL;
-  FILE *File = NULL;
   int ret = -1;
 
   // Allocate host memory for the device sections
@@ -317,61 +315,10 @@ static int ProcessDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex) {
               UniformCountersSize);
   }
 
-  // Construct the device-specific filename
-  // Format: <base>.<target>[.<TUIndex>].<ext>
-  // TUIndex is included when >= 0 to support multi-TU programs
-  char *BaseFilename = (char *)__llvm_profile_get_filename();
-  if (!BaseFilename) {
-    PROF_ERR("%s\n", "Failed to get base profile filename");
-    goto cleanup;
-  }
-  if (IsVerboseMode())
-    PROF_NOTE("Base profile filename: %s\n", BaseFilename);
-
-  const char *TargetInfix = "amdgcn-amd-amdhsa";
-  const char *Extension = strrchr(BaseFilename, '.');
-  char TUIndexStr[16] = "";
-  if (TUIndex >= 0) {
-    snprintf(TUIndexStr, sizeof(TUIndexStr), ".%d", TUIndex);
-  }
-
-  if (Extension) {
-    size_t BaseLen = Extension - BaseFilename;
-    size_t InfixLen = strlen(TargetInfix);
-    size_t TUIndexLen = strlen(TUIndexStr);
-    size_t ExtLen = strlen(Extension);
-    DeviceFilename =
-        (char *)malloc(BaseLen + 1 + InfixLen + TUIndexLen + ExtLen + 1);
-    strncpy(DeviceFilename, BaseFilename, BaseLen);
-    DeviceFilename[BaseLen] = '\0';
-    strcat(DeviceFilename, ".");
-    strcat(DeviceFilename, TargetInfix);
-    strcat(DeviceFilename, TUIndexStr);
-    strcat(DeviceFilename, Extension);
-  } else {
-    DeviceFilename =
-        (char *)malloc(strlen(BaseFilename) + 1 + strlen(TargetInfix) +
-                       strlen(TUIndexStr) + 1);
-    strcpy(DeviceFilename, BaseFilename);
-    strcat(DeviceFilename, ".");
-    strcat(DeviceFilename, TargetInfix);
-    strcat(DeviceFilename, TUIndexStr);
-  }
-  free(BaseFilename);
-
-  if (IsVerboseMode())
-    PROF_NOTE("Device profile filename: %s\n", DeviceFilename);
-
-  // Manually write the profile data with a proper header
-  File = fopen(DeviceFilename, "w");
-  if (!File) {
-    PROF_ERR("Failed to open %s for writing\n", DeviceFilename);
-    goto cleanup;
-  }
-
-  __llvm_profile_header Header;
+  // Compute padding sizes for proper buffer layout
+  // lprofWriteDataImpl computes CountersDelta = CountersBegin - DataBegin
+  // We need to arrange our buffer so this matches the expected file layout
   const uint64_t NumData = DataSize / sizeof(__llvm_profile_data);
-  const uint64_t NumCounters = CountersSize / sizeof(uint64_t);
   const uint64_t NumBitmapBytes = 0;
   const uint64_t VTableSectionSize = 0;
   const uint64_t VNamesSize = 0;
@@ -388,8 +335,31 @@ static int ProcessDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex) {
     goto cleanup;
   }
 
-  // Relocate pointers
-  __llvm_profile_data *RelocatedData = (__llvm_profile_data *)HostDataBegin;
+  // Create contiguous buffer with layout: [Data][Padding][Counters][Names]
+  // This ensures CountersBegin - DataBegin = DataSize + PaddingBytesBeforeCounters
+  size_t ContiguousBufferSize =
+      DataSize + PaddingBytesBeforeCounters + CountersSize + NamesSize;
+  char *ContiguousBuffer = (char *)malloc(ContiguousBufferSize);
+  if (!ContiguousBuffer) {
+    PROF_ERR("%s\n", "Failed to allocate contiguous buffer");
+    goto cleanup;
+  }
+  memset(ContiguousBuffer, 0, ContiguousBufferSize);
+
+  // Set up pointers into the contiguous buffer
+  char *BufDataBegin = ContiguousBuffer;
+  char *BufCountersBegin = ContiguousBuffer + DataSize + PaddingBytesBeforeCounters;
+  char *BufNamesBegin = BufCountersBegin + CountersSize;
+
+  // Copy data into contiguous buffer
+  memcpy(BufDataBegin, HostDataBegin, DataSize);
+  memcpy(BufCountersBegin, HostCountersBegin, CountersSize);
+  memcpy(BufNamesBegin, HostNamesBegin, NamesSize);
+
+  // Relocate CounterPtr in data records for file layout
+  // CounterPtr is device-relative offset; we need to adjust for file layout
+  // where Data section comes first, then Counters section
+  __llvm_profile_data *RelocatedData = (__llvm_profile_data *)BufDataBegin;
   for (uint64_t i = 0; i < NumData; ++i) {
     if (RelocatedData[i].CounterPtr) {
       ptrdiff_t DeviceCounterPtrOffset = (ptrdiff_t)RelocatedData[i].CounterPtr;
@@ -400,6 +370,9 @@ static int ProcessDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex) {
       ptrdiff_t OffsetIntoCountersSection =
           (char *)DeviceCountersAddr - (char *)DevCntsBegin;
 
+      // New offset: from this data record to its counters in file layout
+      // CountersDelta = BufCountersBegin - BufDataBegin = DataSize + Padding
+      // CounterPtr = CountersDelta + OffsetIntoCounters - (i * sizeof)
       ptrdiff_t NewRelativeOffset = DataSize + PaddingBytesBeforeCounters +
                                     OffsetIntoCountersSection -
                                     (i * sizeof(__llvm_profile_data));
@@ -413,111 +386,34 @@ static int ProcessDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex) {
                sizeof(RelocatedData[i].Values));
   }
 
-  // Populate header
-  Header.Magic = __llvm_profile_get_magic();
-  Header.Version = __llvm_profile_get_version();
-  Header.BinaryIdsSize = 0; // Not supported for device PGO yet
-  Header.NumData = NumData;
-  Header.PaddingBytesBeforeCounters = PaddingBytesBeforeCounters;
-  Header.NumCounters = NumCounters;
-  Header.PaddingBytesAfterCounters = PaddingBytesAfterCounters;
-  Header.NumBitmapBytes = NumBitmapBytes;
-  Header.PaddingBytesAfterBitmapBytes = PaddingBytesAfterBitmapBytes;
-  Header.NamesSize = NamesSize;
-  Header.CountersDelta = DataSize + PaddingBytesBeforeCounters;
-  Header.BitmapDelta =
-      Header.CountersDelta + CountersSize + PaddingBytesAfterCounters;
-  Header.NamesDelta =
-      Header.BitmapDelta + NumBitmapBytes + PaddingBytesAfterBitmapBytes;
-  Header.NumVTables = 0;
-  Header.VNamesSize = 0;
-  Header.ValueKindLast = 0; // No value profiling
-
-  // Write header and data
-  if (fwrite(&Header, sizeof(__llvm_profile_header), 1, File) != 1)
-    goto write_error;
-  if (fwrite(HostDataBegin, 1, DataSize, File) != DataSize)
-    goto write_error;
-  if (PaddingBytesBeforeCounters > 0 &&
-      fseek(File, PaddingBytesBeforeCounters, SEEK_CUR) != 0)
-    goto write_error;
-  if (fwrite(HostCountersBegin, 1, CountersSize, File) != CountersSize)
-    goto write_error;
-  if (PaddingBytesAfterCounters > 0 &&
-      fseek(File, PaddingBytesAfterCounters, SEEK_CUR) != 0)
-    goto write_error;
-  if (fwrite(HostNamesBegin, 1, NamesSize, File) != NamesSize)
-    goto write_error;
-
-  // Add padding after names to align to 8 bytes (required by profraw reader)
-  {
-    uint64_t NamesPadding = __llvm_profile_get_num_padding_bytes(NamesSize);
-    if (NamesPadding > 0) {
-      char ZeroPadding[8] = {0};
-      if (fwrite(ZeroPadding, 1, NamesPadding, File) != NamesPadding)
-        goto write_error;
-    }
+  // Build TU suffix string for filename
+  char TUIndexStr[16] = "";
+  if (TUIndex >= 0) {
+    snprintf(TUIndexStr, sizeof(TUIndexStr), "%d", TUIndex);
   }
 
-  if (IsVerboseMode())
-    PROF_NOTE("Successfully wrote profile data to %s\n", DeviceFilename);
+  // Use shared profile writing API
+  const char *TargetTriple = "amdgcn-amd-amdhsa";
+  ret = __llvm_write_custom_profile(
+      TargetTriple, TUIndex >= 0 ? TUIndexStr : NULL,
+      (__llvm_profile_data *)BufDataBegin,
+      (__llvm_profile_data *)(BufDataBegin + DataSize), BufCountersBegin,
+      BufCountersBegin + CountersSize,
+      HostUniformCountersBegin,
+      HostUniformCountersBegin
+          ? HostUniformCountersBegin + UniformCountersSize
+          : NULL,
+      BufNamesBegin, BufNamesBegin + NamesSize, NULL);
 
-  // Write uniform counters to a separate file if available
-  if (UniformCountersSize > 0 && HostUniformCountersBegin) {
-    // Create uniform counters filename by replacing extension with .unifcnts
-    size_t DeviceFilenameLen = strlen(DeviceFilename);
-    char *UniformFilename = (char *)malloc(DeviceFilenameLen + 10);
-    if (UniformFilename) {
-      strcpy(UniformFilename, DeviceFilename);
-      // Find and replace .profraw extension
-      char *ext = strrchr(UniformFilename, '.');
-      if (ext) {
-        strcpy(ext, ".unifcnts");
-      } else {
-        strcat(UniformFilename, ".unifcnts");
-      }
+  free(ContiguousBuffer);
 
-      FILE *UniformFile = fopen(UniformFilename, "wb");
-      if (UniformFile) {
-        // Write a simple header: magic, version, num_counters, counters_size
-        uint64_t UniformMagic = 0x55434E5450524F46ULL; // "UCNTPROF" in ASCII
-        uint64_t UniformVersion = 1;
-        uint64_t NumUniformCounters = UniformCountersSize / sizeof(uint64_t);
-
-        if (fwrite(&UniformMagic, sizeof(uint64_t), 1, UniformFile) != 1 ||
-            fwrite(&UniformVersion, sizeof(uint64_t), 1, UniformFile) != 1 ||
-            fwrite(&NumUniformCounters, sizeof(uint64_t), 1, UniformFile) !=
-                1 ||
-            fwrite(&UniformCountersSize, sizeof(uint64_t), 1, UniformFile) !=
-                1 ||
-            fwrite(HostUniformCountersBegin, 1, UniformCountersSize,
-                   UniformFile) != UniformCountersSize) {
-          PROF_WARN("Failed to write uniform counters to %s\n",
-                    UniformFilename);
-        } else if (IsVerboseMode()) {
-          PROF_NOTE(
-              "Successfully wrote %zu uniform counters (%zu bytes) to %s\n",
-              (size_t)NumUniformCounters, UniformCountersSize, UniformFilename);
-        }
-        fclose(UniformFile);
-      } else {
-        PROF_WARN("Failed to open %s for writing uniform counters\n",
-                  UniformFilename);
-      }
-      free(UniformFilename);
-    }
+  if (ret != 0) {
+    PROF_ERR("%s\n", "Failed to write device profile using shared API");
+  } else if (IsVerboseMode()) {
+    PROF_NOTE("%s\n", "Successfully wrote device profile using shared API");
   }
-
-  ret = 0;
-  goto cleanup;
-
-write_error:
-  PROF_ERR("Failed to write to %s\n", DeviceFilename);
 
 cleanup:
-  if (File)
-    fclose(File);
-  free(DeviceFilename);
   free(HostCountersBegin);
   free(HostDataBegin);
   free(HostNamesBegin);

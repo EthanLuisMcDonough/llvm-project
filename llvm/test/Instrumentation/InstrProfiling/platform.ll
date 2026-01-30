@@ -22,25 +22,20 @@
 ; ELF: @__profc_foo = private global [1 x i64] zeroinitializer, section "__llvm_prf_cnts", comdat, align 8
 ; WINDOWS: @__profc_foo = private global [1 x i64] zeroinitializer, section ".lprfc$M", align 8
 ; AIX: @__profc_foo = private global [1 x i64] zeroinitializer, section "__llvm_prf_cnts", align 8
-;; AMDGPU uses contiguous counter allocation with hash-based naming when no CUID
-; AMDGPU: @__profc_all_{{[0-9]+}} = protected addrspace(1) global [{{[0-9]+}} x i64] zeroinitializer, section "__llvm_prf_cnts_{{[0-9]+}}", align 8
-; AMDGPU: @__profu_all_{{[0-9]+}} = protected addrspace(1) global [{{[0-9]+}} x i64] zeroinitializer, section "__llvm_prf_ucnts_{{[0-9]+}}", align 8
+;; AMDGPU without CUID uses per-function allocation (like ELF) for OpenMP compatibility
+; AMDGPU: @__profc_foo = private addrspace(1) global [{{[0-9]+}} x i64] zeroinitializer, section "__llvm_prf_cnts", comdat, align 8
 
 ; MACHO: @__profd_foo = private {{.*}}, section "__DATA,__llvm_prf_data,regular,live_support", align 8
 ; ELF: @__profd_foo = private {{.*}}, section "__llvm_prf_data", comdat($__profc_foo), align 8
 ; WINDOWS: @__profd_foo = private global {{.*}}, section ".lprfd$M", align 8
 ; AIX: @__profd_foo = private {{.*}}, section "__llvm_prf_data", align 8
+;; AMDGPU without CUID uses per-function data (not alias)
+; AMDGPU: @__profd_foo = protected addrspace(1) global {{.*}}, section "__llvm_prf_data", comdat($__profc_foo), align 8
+
 ; ELF: @__llvm_prf_nm = private constant [{{.*}} x i8] c"{{.*}}", section "{{.*}}__llvm_prf_names"{{.*}}, align 1
 ; WINDOWS: @__llvm_prf_nm = private constant [{{.*}} x i8] c"{{.*}}", section "{{.*}}lprfn$M", align 1
 ; AIX: @__llvm_prf_nm = private constant [{{.*}} x i8] c"{{.*}}", section "{{.*}}__llvm_prf_names", align 1
-;; AMDGPU uses CUID-suffixed names section
-; AMDGPU: @__llvm_prf_nm_{{[0-9]+}} = protected addrspace(1) constant [{{.*}} x i8] c"{{.*}}", section "__llvm_prf_names", align 1
-
-;; Check for __llvm_offload_prf_<CUID> structure (replaces start/stop symbols for AMDGPU)
-; AMDGPU: @__llvm_offload_prf_{{[0-9]+}} = addrspace(1) constant { ptr addrspace(1), ptr addrspace(1), ptr addrspace(1), ptr addrspace(1), ptr addrspace(1), ptr addrspace(1), ptr addrspace(1), ptr addrspace(1) }
-
-;; AMDGPU uses per-TU contiguous allocation, so @__profd_foo is an alias
-; AMDGPU: @__profd_foo = protected alias
+; AMDGPU: @__llvm_prf_nm = protected addrspace(1) constant [{{.*}} x i8] c"{{.*}}", section "__llvm_prf_names", align 1
 
 define void @foo() {
   call void @llvm.instrprof.increment(ptr @__profn_foo, i64 0, i32 1, i32 0)
@@ -49,9 +44,8 @@ define void @foo() {
 
 declare void @llvm.instrprof.increment(ptr, i64, i32, i32)
 
-;; Start/stop symbols are NOT created for AMDGPU with contiguous allocation
-; AMDGPU-NOT: @__start___llvm_prf_cnts
-; AMDGPU-NOT: @__stop___llvm_prf_cnts
+;; AMDGPU without CUID uses standard per-function allocation (for OpenMP compatibility)
+;; Start/stop symbols behavior is platform-specific
 
 ;; Emit registration functions for platforms that don't find the
 ;; symbols by their sections.
