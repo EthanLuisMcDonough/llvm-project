@@ -27612,6 +27612,10 @@ static SDValue performSTORECombine(SDNode *N,
           DAG.getTargetConstant(SecondVal->getZExtValue(), DL, MVT::i16));
       llvm::outs() << "FIRST OP: " << FirstVal->getAsZExtVal() << "\n";
       llvm::outs() << "SECOND OP: " << SecondVal->getAsZExtVal() << "\n";
+      return DAG.getMemIntrinsicNode(
+          AArch64ISD::STP, DL, DAG.getVTList(MVT::Other),
+          {Chain, SDValue(FV, 0), SDValue(SV, 0), Ptr}, MemVT,
+          ST->getMemOperand());
     }
     //SrcVT == MVT::v2i64
   }
