@@ -27597,6 +27597,35 @@ static SDValue performSTORECombine(SDNode *N,
     }
   }
 
+  // For loads that read constant <2 x i64> values, use two MOVZs and a stp
+  // instruction if both i64 values fit inside 16 bits.
+  if (ST->getOperand(1).getValueType() == MVT::v2i64 &&
+      ST->getOperand(1).getNumOperands() == 2) {
+    auto *FirstVal =
+        dyn_cast<ConstantSDNode>(ST->getOperand(1).getOperand(0).getNode());
+    auto *SecondVal =
+        dyn_cast<ConstantSDNode>(ST->getOperand(1).getOperand(1).getNode());
+    if (FirstVal && SecondVal &&
+        FirstVal->getZExtValue() <= std::numeric_limits<uint16_t>::max() &&
+        SecondVal->getZExtValue() <= std::numeric_limits<uint16_t>::max()) {
+      auto GenImmMov = [&](uint64_t Imm) {
+        return Imm == 0 ? DAG.getRegister(AArch64::XZR, MVT::i64)
+                        : SDValue(DAG.getMachineNode(
+                                      AArch64::MOVZXi, DL, MVT::i64,
+                                      DAG.getTargetConstant(Imm, DL, MVT::i16),
+                                      DAG.getTargetConstant(0, DL, MVT::i64)),
+                                  0);
+      };
+      auto FV = GenImmMov(FirstVal->getZExtValue());
+      auto SV = GenImmMov(SecondVal->getZExtValue());
+      if (DAG.getDataLayout().isBigEndian())
+        std::swap(FV, SV);
+      return DAG.getMemIntrinsicNode(
+          AArch64ISD::STP, DL, DAG.getVTList(MVT::Other), {Chain, FV, SV, Ptr},
+          MemVT, ST->getMemOperand());
+    }
+  }
+
   // This is an integer vector_extract_elt followed by a (possibly truncating)
   // store. We may be able to replace this with a store of an FP subregister.
   if (DCI.isAfterLegalizeDAG() && ST->isUnindexed() &&
