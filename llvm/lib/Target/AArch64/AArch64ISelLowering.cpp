@@ -27603,7 +27603,13 @@ static SDValue performSTORECombine(SDNode *N,
     if (FirstVal && SecondVal &&
         FirstVal->getZExtValue() <= std::numeric_limits<uint16_t>::max() &&
         SecondVal->getZExtValue() <= std::numeric_limits<uint16_t>::max()) {
-      // AArch64::MOVKXi
+      //
+      auto *FV = DAG.getMachineNode(
+          AArch64::MOVKXi, DL, MVT::i64,
+          DAG.getTargetConstant(FirstVal->getZExtValue(), DL, MVT::i16));
+      auto *SV = DAG.getMachineNode(
+          AArch64::MOVKXi, DL, MVT::i64,
+          DAG.getTargetConstant(SecondVal->getZExtValue(), DL, MVT::i16));
       llvm::outs() << "FIRST OP: " << FirstVal->getAsZExtVal() << "\n";
       llvm::outs() << "SECOND OP: " << SecondVal->getAsZExtVal() << "\n";
     }
