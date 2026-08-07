@@ -27595,6 +27595,13 @@ static SDValue performSTORECombine(SDNode *N,
     }
   }
 
+  if (ST->getNumOperands() > 2 && ST->getOperand(1).getSimpleValueType() == MVT::v2i64) {
+    if (ST->getOperand(1).getNumOperands() > 1 && isa<ConstantSDNode>(ST->getOperand(1).getOperand(0).getNode())) {
+      llvm::outs() << "FIRST OP: " << ST->getOperand(1).getOperand(0).getNode()->getAsZExtVal() << "\n";
+    }
+    //SrcVT == MVT::v2i64
+  }
+
   // This is an integer vector_extract_elt followed by a (possibly truncating)
   // store. We may be able to replace this with a store of an FP subregister.
   if (DCI.isAfterLegalizeDAG() && ST->isUnindexed() &&
