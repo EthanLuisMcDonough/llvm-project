@@ -27595,9 +27595,17 @@ static SDValue performSTORECombine(SDNode *N,
     }
   }
 
-  if (ST->getNumOperands() > 2 && ST->getOperand(1).getSimpleValueType() == MVT::v2i64) {
-    if (ST->getOperand(1).getNumOperands() > 1 && isa<ConstantSDNode>(ST->getOperand(1).getOperand(0).getNode())) {
-      llvm::outs() << "FIRST OP: " << ST->getOperand(1).getOperand(0).getNode()->getAsZExtVal() << "\n";
+  if (ST->getOperand(1).getSimpleValueType() == MVT::v2i64) {
+    auto *FirstVal =
+        dyn_cast<ConstantSDNode>(ST->getOperand(1).getOperand(0).getNode());
+    auto *SecondVal =
+        dyn_cast<ConstantSDNode>(ST->getOperand(1).getOperand(1).getNode());
+    if (FirstVal && SecondVal &&
+        FirstVal->getZExtValue() <= std::numeric_limits<uint16_t>::max() &&
+        SecondVal->getZExtValue() <= std::numeric_limits<uint16_t>::max()) {
+      // AArch64::MOVKXi
+      llvm::outs() << "FIRST OP: " << FirstVal->getAsZExtVal() << "\n";
+      llvm::outs() << "SECOND OP: " << SecondVal->getAsZExtVal() << "\n";
     }
     //SrcVT == MVT::v2i64
   }
