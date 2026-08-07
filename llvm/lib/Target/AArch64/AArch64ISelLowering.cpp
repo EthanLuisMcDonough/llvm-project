@@ -27603,21 +27603,22 @@ static SDValue performSTORECombine(SDNode *N,
     if (FirstVal && SecondVal &&
         FirstVal->getZExtValue() <= std::numeric_limits<uint16_t>::max() &&
         SecondVal->getZExtValue() <= std::numeric_limits<uint16_t>::max()) {
-      //
-      auto *FV = DAG.getMachineNode(
-          AArch64::MOVKXi, DL, MVT::i64,
-          DAG.getTargetConstant(FirstVal->getZExtValue(), DL, MVT::i16));
-      auto *SV = DAG.getMachineNode(
-          AArch64::MOVKXi, DL, MVT::i64,
-          DAG.getTargetConstant(SecondVal->getZExtValue(), DL, MVT::i16));
-      llvm::outs() << "FIRST OP: " << FirstVal->getAsZExtVal() << "\n";
-      llvm::outs() << "SECOND OP: " << SecondVal->getAsZExtVal() << "\n";
+      auto GenImmMov = [&](uint64_t Imm) {
+        return Imm == 0 ? DAG.getRegister(AArch64::XZR, MVT::i64)
+                        : SDValue(DAG.getMachineNode(
+                                      AArch64::MOVZXi, DL, MVT::i64,
+                                      DAG.getTargetConstant(Imm, DL, MVT::i16),
+                                      DAG.getTargetConstant(0, DL, MVT::i64)),
+                                  0);
+      };
+      auto FV = GenImmMov(FirstVal->getZExtValue());
+      auto SV = GenImmMov(SecondVal->getZExtValue());
+      if (DAG.getDataLayout().isBigEndian())
+        std::swap(FV, SV);
       return DAG.getMemIntrinsicNode(
-          AArch64ISD::STP, DL, DAG.getVTList(MVT::Other),
-          {Chain, SDValue(FV, 0), SDValue(SV, 0), Ptr}, MemVT,
-          ST->getMemOperand());
+          AArch64ISD::STP, DL, DAG.getVTList(MVT::Other), {Chain, FV, SV, Ptr},
+          MemVT, ST->getMemOperand());
     }
-    //SrcVT == MVT::v2i64
   }
 
   // This is an integer vector_extract_elt followed by a (possibly truncating)
