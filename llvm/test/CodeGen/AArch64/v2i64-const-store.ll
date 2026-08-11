@@ -4,7 +4,7 @@
 define void @foo(ptr %s) {
 ; CHECK-LABEL: foo:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    mov x8, #1 // =0x1
+; CHECK-NEXT:    mov w8, #1 // =0x1
 ; CHECK-NEXT:    stp x8, xzr, [x0]
 ; CHECK-NEXT:    ret
 entry:
@@ -15,8 +15,8 @@ entry:
 define void @foo2(ptr %s) {
 ; CHECK-LABEL: foo2:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    mov x8, #10293 // =0x2835
-; CHECK-NEXT:    mov x9, #2329 // =0x919
+; CHECK-NEXT:    mov w8, #10293 // =0x2835
+; CHECK-NEXT:    mov w9, #2329 // =0x919
 ; CHECK-NEXT:    stp x9, x8, [x0]
 ; CHECK-NEXT:    ret
 entry:
