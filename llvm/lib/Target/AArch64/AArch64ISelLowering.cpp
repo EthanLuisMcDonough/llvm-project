@@ -27429,6 +27429,144 @@ static SDValue combineStoreValueFPToInt(StoreSDNode *ST,
   return SDValue(ST, 0);
 }
 
+static void debugNode(const SDValue &Value) {
+  Value.dump();
+  llvm::outs() << "numOperands: " << Value.getNumOperands() << "\n";
+  llvm::outs() << "getValueType " << Value.getValueType() << "\n";
+  llvm::outs() << LoadSDNode::classof(Value.getNode()) << "\n";
+}
+
+static SDValue combineConstantPoolStore(StoreSDNode *ST, SelectionDAG &DAG) {
+  llvm::outs() << "combineConstantPoolStore\n";
+  SDValue Chain = ST->getChain();
+  SDValue Value = ST->getValue();
+  SDValue Ptr = ST->getBasePtr();
+  debugNode(Value);
+
+  auto *NestedLoad = dyn_cast<LoadSDNode>(Value.getNode());
+  if (!NestedLoad || Value.getValueType() != MVT::v2i64)
+    return SDValue();
+  llvm::outs() << "Got nested load\n";
+
+  auto AdrpNode = NestedLoad->getBasePtr();
+  llvm::outs() << "ADRP: ";
+  debugNode(AdrpNode);
+  llvm::outs() << AdrpNode.getOpcode() << " " << AArch64ISD::ADRP << " " << AArch64ISD::ADDlow << "\n";
+
+  llvm::outs() << "First: ";
+  debugNode(AdrpNode.getOperand(0));
+  
+  llvm::outs() << "Sec: ";
+  debugNode(AdrpNode.getOperand(1));
+
+  if (AdrpNode.getOpcode() != AArch64ISD::ADRP || AdrpNode.getNumOperands() < 2)
+    return SDValue();
+  llvm::outs() << "Got ADRP\n";
+
+  auto *CPN = dyn_cast<ConstantPoolSDNode>(AdrpNode.getOperand(1).getNode());
+  if (!CPN)
+    return SDValue();
+
+  llvm::outs() << "Got constant pool\n";
+  auto *CV = CPN->getConstVal();
+  auto *CVT = dyn_cast<FixedVectorType>(CV->getType());
+  if (!CVT || CVT->getNumElements() != 2 ||
+      !CVT->getElementType()->isIntegerTy(64))
+    return SDValue();
+
+  llvm::outs() << "Got vector type\n";
+
+  auto *FC = dyn_cast<ConstantInt>(CV->getAggregateElement(0U));
+  auto *SC = dyn_cast<ConstantInt>(CV->getAggregateElement(1U));
+  llvm::outs() << *FC << ", " << *SC << "\n";
+
+  auto First = FC->getZExtValue();
+  auto Second = SC->getZExtValue();
+  if (DAG.getDataLayout().isBigEndian())
+    std::swap(First, Second);
+
+  SDLoc DL(ST);
+  if (AArch64_AM::isAnyMOVWMovAlias(First, 64) &&
+      AArch64_AM::isAnyMOVWMovAlias(Second, 64)) {
+    llvm::outs() << First << ", " << Second << "\n";
+    return DAG.getMemIntrinsicNode(AArch64ISD::STP, DL,
+                                   DAG.getVTList(MVT::Other),
+                                   {Chain, DAG.getConstant(First, DL, MVT::i64),
+                                    DAG.getConstant(Second, DL, MVT::i64), Ptr},
+                                   ST->getMemoryVT(), ST->getMemOperand());
+  }
+
+  return SDValue();
+
+  // if (DCI.isAfterLegalizeDAG()) {
+  //   llvm::outs() << "isAfterLegalizeDAG\n";
+  //   debugNode(Value);
+  //   // Value.dump();
+  //   // llvm::outs() << "numOperands: " << Value.getNumOperands() << "\n";
+  //   // llvm::outs() << "getValueType " << Value.getValueType() << "\n";
+  //   // llvm::outs() << LoadSDNode::classof(Value.getNode()) << "\n";
+  //   if (auto *NST = dyn_cast<LoadSDNode>(Value.getNode())) {
+  //     llvm::outs() << "Nested load\n";
+  //     auto BP = NST->getBasePtr();
+  //     debugNode(BP);
+  //     // NST->getBasePtr().dump();
+  //     // llvm::outs() << "NL opcode: " << (NST->getBasePtr().getOpcode() ==
+  //     AArch64ISD::ADRP) << "\n";
+  //     // llvm::outs() << "NL numOperands: " <<
+  //     NST->getBasePtr().getNumOperands() << "\n";
+  //     // llvm::outs() << "NL getValueType " <<
+  //     NST->getBasePtr().getValueType() << "\n";
+
+  //     // auto FV = BP.getOperand(0);
+  //     // auto SV = BP.getOperand(1);
+  //     llvm::outs() << "Op 0: ";
+  //     debugNode(BP.getOperand(0));
+  //     llvm::outs() << "Op 1: ";
+  //     if (auto *CN = dyn_cast<ConstantPoolSDNode>(BP.getOperand(1))) {
+  //       auto *GV = CN->getConstVal();
+  //       if (auto *VT = dyn_cast<VectorType>(GV)) {
+  //         if (VT->getElementCount()) {
+
+  //         }
+  //       }
+  //       llvm::outs() << "CONST: " << *CN->getConstVal() << "\n";
+  //       llvm::outs() << "operands: " << CN->getConstVal()->getNumOperands()
+  //       << "\n";
+  //     }
+  //     debugNode(BP.getOperand(1));
+  //     // auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
+  //     // auto *SC = dyn_cast<ConstantSDNode>(SV.getNode());
+  //     // if (FC && SC) {
+  //     //   llvm::outs() << FC->getZExtValue() << ", " << SC->getZExtValue()
+  //     << "\n";
+  //     // }
+  //   }
+  // } else {
+  //   llvm::outs() << "before isAfterLegalizeDAG\n";
+  //   Value.dump();
+  // }
+
+  // // For stores that save constant <2 x i64> values, use two mov instructions
+  // // and a stp instruction if both i64 are elligable mov immediate values.
+  // if (DCI.isAfterLegalizeDAG() && Value.getOpcode() == ISD::BUILD_VECTOR &&
+  //     Value.getValueType() == MVT::v2i64 && Value.getNumOperands() == 2 &&
+  //     !ISD::isBuildVectorAllZeros(Value.getNode())) {
+  //   llvm::outs() << "RUNNING\n";
+  //   auto FV = Value.getOperand(0);
+  //   auto SV = Value.getOperand(1);
+  //   auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
+  //   auto *SC = dyn_cast<ConstantSDNode>(SV.getNode());
+  //   if (FC && SC && AArch64_AM::isAnyMOVWMovAlias(FC->getZExtValue(), 64) &&
+  //       AArch64_AM::isAnyMOVWMovAlias(SC->getZExtValue(), 64)) {
+  //     if (DAG.getDataLayout().isBigEndian())
+  //       std::swap(FV, SV);
+  //     return DAG.getMemIntrinsicNode(
+  //         AArch64ISD::STP, DL, DAG.getVTList(MVT::Other), {Chain, FV, SV,
+  //         Ptr}, MemVT, ST->getMemOperand());
+  //   }
+  // }
+}
+
 static bool isHalvingTruncateOfLegalScalableType(EVT SrcVT, EVT DstVT) {
   return (SrcVT == MVT::nxv8i16 && DstVT == MVT::nxv8i8) ||
          (SrcVT == MVT::nxv4i32 && DstVT == MVT::nxv4i16) ||
@@ -27504,6 +27642,13 @@ static SDValue
 performInterleavedStoreCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
                                SelectionDAG &DAG);
 
+// static void debugNode(const SDValue &Value) {
+//   Value.dump();
+//   llvm::outs() << "numOperands: " << Value.getNumOperands() << "\n";
+//   llvm::outs() << "getValueType " << Value.getValueType() << "\n";
+//   llvm::outs() << LoadSDNode::classof(Value.getNode()) << "\n";
+// }
+
 static SDValue performSTORECombine(SDNode *N,
                                    TargetLowering::DAGCombinerInfo &DCI,
                                    SelectionDAG &DAG,
@@ -27517,6 +27662,73 @@ static SDValue performSTORECombine(SDNode *N,
   EVT MemVT = ST->getMemoryVT();
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   SDLoc DL(ST);
+
+  // if (DCI.isAfterLegalizeDAG()) {
+  //   llvm::outs() << "isAfterLegalizeDAG\n";
+  //   debugNode(Value);
+  //   // Value.dump();
+  //   // llvm::outs() << "numOperands: " << Value.getNumOperands() << "\n";
+  //   // llvm::outs() << "getValueType " << Value.getValueType() << "\n";
+  //   // llvm::outs() << LoadSDNode::classof(Value.getNode()) << "\n";
+  //   if (auto *NST = dyn_cast<LoadSDNode>(Value.getNode())) {
+  //     llvm::outs() << "Nested load\n";
+  //     auto BP = NST->getBasePtr();
+  //     debugNode(BP);
+  //     // NST->getBasePtr().dump();
+  //     // llvm::outs() << "NL opcode: " << (NST->getBasePtr().getOpcode() ==
+  //     // AArch64ISD::ADRP) << "\n"; llvm::outs() << "NL numOperands: " <<
+  //     // NST->getBasePtr().getNumOperands() << "\n"; llvm::outs() << "NL
+  //     // getValueType " << NST->getBasePtr().getValueType() << "\n";
+
+  //     // auto FV = BP.getOperand(0);
+  //     // auto SV = BP.getOperand(1);
+  //     llvm::outs() << "Op 0: ";
+  //     debugNode(BP.getOperand(0));
+  //     llvm::outs() << "Op 1: ";
+  //     if (auto *CN = dyn_cast<ConstantPoolSDNode>(BP.getOperand(1))) {
+  //       auto *GV = CN->getConstVal();
+  //       // if (auto *VT = dyn_cast<VectorType>(GV)) {
+  //       //   if (VT->getElementCount()) {
+
+  //       //   }
+  //       // }
+  //       llvm::outs() << "CONST: " << *CN->getConstVal() << "\n";
+  //       llvm::outs() << "operands: " << CN->getConstVal()->getNumOperands()
+  //                    << "\n";
+  //     }
+  //     debugNode(BP.getOperand(1));
+  //     // auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
+  //     // auto *SC = dyn_cast<ConstantSDNode>(SV.getNode());
+  //     // if (FC && SC) {
+  //     //   llvm::outs() << FC->getZExtValue() << ", " << SC->getZExtValue()
+  //     <<
+  //     //   "\n";
+  //     // }
+  //   }
+  // } else {
+  //   llvm::outs() << "before isAfterLegalizeDAG\n";
+  //   Value.dump();
+  // }
+
+  // For stores that save constant <2 x i64> values, use two mov instructions
+  // and a stp instruction if both i64 are elligable mov immediate values.
+  // if (DCI.isAfterLegalizeDAG() && Value.getOpcode() == ISD::BUILD_VECTOR &&
+  //     Value.getValueType() == MVT::v2i64 && Value.getNumOperands() == 2 &&
+  //     !ISD::isBuildVectorAllZeros(Value.getNode())) {
+  //   llvm::outs() << "RUNNING\n";
+  //   auto FV = Value.getOperand(0);
+  //   auto SV = Value.getOperand(1);
+  //   auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
+  //   auto *SC = dyn_cast<ConstantSDNode>(SV.getNode());
+  //   if (FC && SC && AArch64_AM::isAnyMOVWMovAlias(FC->getZExtValue(), 64) &&
+  //       AArch64_AM::isAnyMOVWMovAlias(SC->getZExtValue(), 64)) {
+  //     if (DAG.getDataLayout().isBigEndian())
+  //       std::swap(FV, SV);
+  //     return DAG.getMemIntrinsicNode(
+  //         AArch64ISD::STP, DL, DAG.getVTList(MVT::Other), {Chain, FV, SV, Ptr},
+  //         MemVT, ST->getMemOperand());
+  //   }
+  // }
 
   // Fixed length svbool_t store operations use an i8 vector as the underlying
   // memory type which is cast from a scalable boolean vector. This combine
@@ -27597,24 +27809,8 @@ static SDValue performSTORECombine(SDNode *N,
     }
   }
 
-  // For stores that save constant <2 x i64> values, use two mov instructions
-  // and a stp instruction if both i64 are elligable mov immediate values.
-  if (Value.getOpcode() == ISD::BUILD_VECTOR &&
-      Value.getValueType() == MVT::v2i64 && Value.getNumOperands() == 2 &&
-      !ISD::isBuildVectorAllZeros(Value.getNode())) {
-    auto FV = Value.getOperand(0);
-    auto SV = Value.getOperand(1);
-    auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
-    auto *SC = dyn_cast<ConstantSDNode>(SV.getNode());
-    if (FC && SC && AArch64_AM::isAnyMOVWMovAlias(FC->getZExtValue(), 64) &&
-        AArch64_AM::isAnyMOVWMovAlias(SC->getZExtValue(), 64)) {
-      if (DAG.getDataLayout().isBigEndian())
-        std::swap(FV, SV);
-      return DAG.getMemIntrinsicNode(
-          AArch64ISD::STP, DL, DAG.getVTList(MVT::Other), {Chain, FV, SV, Ptr},
-          MemVT, ST->getMemOperand());
-    }
-  }
+  if (SDValue Store = combineConstantPoolStore(ST, DAG))
+    return Store;
 
   // This is an integer vector_extract_elt followed by a (possibly truncating)
   // store. We may be able to replace this with a store of an FP subregister.
