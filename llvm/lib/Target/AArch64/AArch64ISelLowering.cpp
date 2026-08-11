@@ -27632,7 +27632,9 @@ static SDValue performSTORECombine(SDNode *N,
 
   // For stores that save constant <2 x i64> values, use two mov instructions
   // and a stp instruction if both i64 are elligable mov immediate values.
-  if (Value.getValueType() == MVT::v2i64 && Value.getNumOperands() == 2) {
+  if (Value.getOpcode() == ISD::BUILD_VECTOR &&
+      Value.getValueType() == MVT::v2i64 && Value.getNumOperands() == 2 &&
+      !ISD::isBuildVectorAllZeros(Value.getNode())) {
     auto FV = Value.getOperand(0);
     auto SV = Value.getOperand(1);
     auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
