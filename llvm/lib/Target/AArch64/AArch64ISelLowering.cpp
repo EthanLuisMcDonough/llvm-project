@@ -27437,48 +27437,55 @@ static void debugNode(const SDValue &Value) {
 }
 
 static SDValue combineConstantPoolStore(StoreSDNode *ST, SelectionDAG &DAG) {
-  llvm::outs() << "combineConstantPoolStore\n";
+  //llvm::outs() << "combineConstantPoolStore\n";
   SDValue Chain = ST->getChain();
   SDValue Value = ST->getValue();
   SDValue Ptr = ST->getBasePtr();
   debugNode(Value);
 
-  auto *NestedLoad = dyn_cast<LoadSDNode>(Value.getNode());
-  if (!NestedLoad || Value.getValueType() != MVT::v2i64)
+  auto *Load = dyn_cast<LoadSDNode>(Value.getNode());
+  if (!Load || Value.getValueType() != MVT::v2i64)
     return SDValue();
-  llvm::outs() << "Got nested load\n";
+  //llvm::outs() << "Got nested load\n";
 
-  auto AdrpNode = NestedLoad->getBasePtr();
-  llvm::outs() << "ADRP: ";
-  debugNode(AdrpNode);
-  llvm::outs() << AdrpNode.getOpcode() << " " << AArch64ISD::ADRP << " " << AArch64ISD::ADDlow << "\n";
+  auto LN = Load->getBasePtr();
+  const Constant *CV = nullptr;
+  //ConstantPoolSDNode *CPN = nullptr;
 
-  llvm::outs() << "First: ";
-  debugNode(AdrpNode.getOperand(0));
-  
-  llvm::outs() << "Sec: ";
-  debugNode(AdrpNode.getOperand(1));
+  switch (LN.getOpcode()) {
+	case AArch64ISD::ADDlow: {
+		SDValue AN = LN.getOperand(0);
+		SDValue CN = LN.getOperand(1);
+		auto *CPN = dyn_cast<ConstantPoolSDNode>(CN.getNode());
+		if (!CPN || AN.getOpcode() != AArch64ISD::ADRP)
+			return SDValue();
+		auto *ACPN = dyn_cast<ConstantPoolSDNode>(AN.getOperand(0));
+		CV = CPN->getConstVal();
+		if (!ACPN || CV != ACPN->getConstVal())
+			return SDValue();
 
-  if (AdrpNode.getOpcode() != AArch64ISD::ADRP || AdrpNode.getNumOperands() < 2)
-    return SDValue();
-  llvm::outs() << "Got ADRP\n";
+		//llvm::outs() << CPN << ", " << AN.getOpcode() << ", " << (AN.getOperand(0).getNode()->getNodeId()) << " == " << CN->getNodeId() << "\n";
+		//AN.getOperand(0).dump();
+		//CN.dump();
+		//if (!CPN || AN.getOpcode() != AArch64ISD::ADRP || AN.getOperand(0) != CN)
+		//	return SDValue();
+	}
+	break;
+	default: return SDValue();
+  }
 
-  auto *CPN = dyn_cast<ConstantPoolSDNode>(AdrpNode.getOperand(1).getNode());
-  if (!CPN)
-    return SDValue();
-
-  llvm::outs() << "Got constant pool\n";
-  auto *CV = CPN->getConstVal();
+  //llvm::outs() << "Got constant pool\n";
+  //auto *CV = CPN->getConstVal();
   auto *CVT = dyn_cast<FixedVectorType>(CV->getType());
   if (!CVT || CVT->getNumElements() != 2 ||
       !CVT->getElementType()->isIntegerTy(64))
     return SDValue();
 
-  llvm::outs() << "Got vector type\n";
+  //llvm::outs() << "Got vector type\n";
 
   auto *FC = dyn_cast<ConstantInt>(CV->getAggregateElement(0U));
   auto *SC = dyn_cast<ConstantInt>(CV->getAggregateElement(1U));
-  llvm::outs() << *FC << ", " << *SC << "\n";
+  //llvm::outs() << *FC << ", " << *SC << "\n";
 
   auto First = FC->getZExtValue();
   auto Second = SC->getZExtValue();
@@ -27488,7 +27495,7 @@ static SDValue combineConstantPoolStore(StoreSDNode *ST, SelectionDAG &DAG) {
   SDLoc DL(ST);
   if (AArch64_AM::isAnyMOVWMovAlias(First, 64) &&
       AArch64_AM::isAnyMOVWMovAlias(Second, 64)) {
-    llvm::outs() << First << ", " << Second << "\n";
+    //llvm::outs() << First << ", " << Second << "\n";
     return DAG.getMemIntrinsicNode(AArch64ISD::STP, DL,
                                    DAG.getVTList(MVT::Other),
                                    {Chain, DAG.getConstant(First, DL, MVT::i64),
@@ -27589,6 +27596,7 @@ static SDValue combineI8TruncStore(StoreSDNode *ST, SelectionDAG &DAG,
   EVT WideVT = EVT::getVectorVT(
       *DAG.getContext(),
       Value->getOperand(0).getValueType().getVectorElementType(), 4);
+
   if (!DAG.getTargetLoweringInfo().isTypeLegal(WideVT))
     return SDValue();
   SDValue PoisonVector = DAG.getPOISON(WideVT);
