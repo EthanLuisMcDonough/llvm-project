@@ -27429,6 +27429,60 @@ static SDValue combineStoreValueFPToInt(StoreSDNode *ST,
   return SDValue(ST, 0);
 }
 
+static SDValue combineConstantPoolStore(StoreSDNode *ST, SelectionDAG &DAG) {
+  SDValue Chain = ST->getChain();
+  SDValue Value = ST->getValue();
+  SDValue Ptr = ST->getBasePtr();
+
+  auto *Load = dyn_cast<LoadSDNode>(Value.getNode());
+  if (!Load || Value.getValueType() != MVT::v2i64)
+    return SDValue();
+
+  auto LN = Load->getBasePtr();
+  const Constant *CV = nullptr;
+
+  switch (LN.getOpcode()) {
+  case AArch64ISD::ADDlow: {
+    SDValue AN = LN.getOperand(0);
+    SDValue CN = LN.getOperand(1);
+    auto *CPN = dyn_cast<ConstantPoolSDNode>(CN.getNode());
+    if (!CPN || AN.getOpcode() != AArch64ISD::ADRP)
+      return SDValue();
+    auto *ACPN = dyn_cast<ConstantPoolSDNode>(AN.getOperand(0));
+    CV = CPN->getConstVal();
+    if (!ACPN || CV != ACPN->getConstVal())
+      return SDValue();
+  } break;
+  default:
+    return SDValue();
+  }
+
+  auto *CVT = dyn_cast<FixedVectorType>(CV->getType());
+  if (!CVT || CVT->getNumElements() != 2 ||
+      !CVT->getElementType()->isIntegerTy(64))
+    return SDValue();
+
+  auto *FC = dyn_cast<ConstantInt>(CV->getAggregateElement(0U));
+  auto *SC = dyn_cast<ConstantInt>(CV->getAggregateElement(1U));
+
+  auto First = FC->getZExtValue();
+  auto Second = SC->getZExtValue();
+  if (DAG.getDataLayout().isBigEndian())
+    std::swap(First, Second);
+
+  SDLoc DL(ST);
+  if (AArch64_AM::isAnyMOVWMovAlias(First, 64) &&
+      AArch64_AM::isAnyMOVWMovAlias(Second, 64)) {
+    return DAG.getMemIntrinsicNode(AArch64ISD::STP, DL,
+                                   DAG.getVTList(MVT::Other),
+                                   {Chain, DAG.getConstant(First, DL, MVT::i64),
+                                    DAG.getConstant(Second, DL, MVT::i64), Ptr},
+                                   ST->getMemoryVT(), ST->getMemOperand());
+  }
+
+  return SDValue();
+}
+
 static bool isHalvingTruncateOfLegalScalableType(EVT SrcVT, EVT DstVT) {
   return (SrcVT == MVT::nxv8i16 && DstVT == MVT::nxv8i8) ||
          (SrcVT == MVT::nxv4i32 && DstVT == MVT::nxv4i16) ||
@@ -27597,24 +27651,8 @@ static SDValue performSTORECombine(SDNode *N,
     }
   }
 
-  // For stores that save constant <2 x i64> values, use two mov instructions
-  // and a stp instruction if both i64 are elligable mov immediate values.
-  if (Value.getOpcode() == ISD::BUILD_VECTOR &&
-      Value.getValueType() == MVT::v2i64 && Value.getNumOperands() == 2 &&
-      !ISD::isBuildVectorAllZeros(Value.getNode())) {
-    auto FV = Value.getOperand(0);
-    auto SV = Value.getOperand(1);
-    auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
-    auto *SC = dyn_cast<ConstantSDNode>(SV.getNode());
-    if (FC && SC && AArch64_AM::isAnyMOVWMovAlias(FC->getZExtValue(), 64) &&
-        AArch64_AM::isAnyMOVWMovAlias(SC->getZExtValue(), 64)) {
-      if (DAG.getDataLayout().isBigEndian())
-        std::swap(FV, SV);
-      return DAG.getMemIntrinsicNode(
-          AArch64ISD::STP, DL, DAG.getVTList(MVT::Other), {Chain, FV, SV, Ptr},
-          MemVT, ST->getMemOperand());
-    }
-  }
+  if (SDValue Store = combineConstantPoolStore(ST, DAG))
+    return Store;
 
   // This is an integer vector_extract_elt followed by a (possibly truncating)
   // store. We may be able to replace this with a store of an FP subregister.

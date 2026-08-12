@@ -138,12 +138,12 @@ define i64 @extract_v2i64_extract_build_vector_opaque(<2 x i64> %a, i32 %c) {
 ; CHECK-SD:       // %bb.0: // %entry
 ; CHECK-SD-NEXT:    sub sp, sp, #16
 ; CHECK-SD-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-SD-NEXT:    adrp x8, .LCPI8_0
-; CHECK-SD-NEXT:    // kill: def $w0 killed $w0 def $x0
-; CHECK-SD-NEXT:    ldr q0, [x8, :lo12:.LCPI8_0]
 ; CHECK-SD-NEXT:    mov x8, sp
+; CHECK-SD-NEXT:    // kill: def $w0 killed $w0 def $x0
+; CHECK-SD-NEXT:    mov w9, #11 // =0xb
+; CHECK-SD-NEXT:    mov w10, #42 // =0x2a
 ; CHECK-SD-NEXT:    bfi x8, x0, #3, #1
-; CHECK-SD-NEXT:    str q0, [sp]
+; CHECK-SD-NEXT:    stp x10, x9, [sp]
 ; CHECK-SD-NEXT:    ldr x0, [x8]
 ; CHECK-SD-NEXT:    add sp, sp, #16
 ; CHECK-SD-NEXT:    ret
