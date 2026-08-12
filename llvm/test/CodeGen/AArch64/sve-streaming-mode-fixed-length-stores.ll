@@ -376,9 +376,8 @@ define void @store_v4i64(ptr %a) {
 ;
 ; NONEON-NOSVE-LABEL: store_v4i64:
 ; NONEON-NOSVE:       // %bb.0:
-; NONEON-NOSVE-NEXT:    adrp x8, .LCPI22_0
-; NONEON-NOSVE-NEXT:    ldr q0, [x8, :lo12:.LCPI22_0]
-; NONEON-NOSVE-NEXT:    stp q0, q0, [x0]
+; NONEON-NOSVE-NEXT:    stp xzr, xzr, [x0, #16]
+; NONEON-NOSVE-NEXT:    stp xzr, xzr, [x0]
 ; NONEON-NOSVE-NEXT:    ret
   store <4 x i64> zeroinitializer, ptr %a
   ret void

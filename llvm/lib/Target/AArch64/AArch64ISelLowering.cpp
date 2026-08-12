@@ -27441,7 +27441,7 @@ static SDValue combineConstantPoolStore(StoreSDNode *ST, SelectionDAG &DAG) {
   SDValue Chain = ST->getChain();
   SDValue Value = ST->getValue();
   SDValue Ptr = ST->getBasePtr();
-  debugNode(Value);
+  //debugNode(Value);
 
   auto *Load = dyn_cast<LoadSDNode>(Value.getNode());
   if (!Load || Value.getValueType() != MVT::v2i64)
