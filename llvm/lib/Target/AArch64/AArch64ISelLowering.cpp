@@ -1643,6 +1643,8 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::FMA, VT, Custom);
   }
 
+  setOperationAction(ISD::STORE, MVT::v2i64, Custom);
+
   if (Subtarget->isSVEorStreamingSVEAvailable()) {
     for (auto VT : {MVT::nxv16i8, MVT::nxv8i16, MVT::nxv4i32, MVT::nxv2i64}) {
       setOperationAction(ISD::BITREVERSE, VT, Custom);
@@ -7851,6 +7853,36 @@ static bool tryLowerMultiVectorLoad(LoadSDNode *LoadNode,
   return true;
 }
 
+static SDValue trySplitConstant128(StoreSDNode *ST, SelectionDAG &DAG) {
+  SDLoc Dl(ST);
+  SDValue Value = ST->getValue();
+  EVT VT = Value.getValueType();
+  EVT MemVT = ST->getMemoryVT();
+  SDValue Chain = ST->getChain();
+  SDValue Ptr = ST->getBasePtr();
+
+  // For stores that save constant <2 x i64> values, use two mov instructions
+  // and a stp instruction if both i64 are elligable mov immediate values.
+  if (Value.getOpcode() == ISD::BUILD_VECTOR && VT == MVT::v2i64 &&
+      Value.getNumOperands() == 2 &&
+      !ISD::isBuildVectorAllZeros(Value.getNode())) {
+    auto FV = Value.getOperand(0);
+    auto SV = Value.getOperand(1);
+    auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
+    auto *SC = dyn_cast<ConstantSDNode>(SV.getNode());
+    if (FC && SC && AArch64_AM::isAnyMOVWMovAlias(FC->getZExtValue(), 64) &&
+        AArch64_AM::isAnyMOVWMovAlias(SC->getZExtValue(), 64)) {
+      if (DAG.getDataLayout().isBigEndian())
+        std::swap(FV, SV);
+      return DAG.getMemIntrinsicNode(
+          AArch64ISD::STP, Dl, DAG.getVTList(MVT::Other), {Chain, FV, SV, Ptr},
+          MemVT, ST->getMemOperand());
+    }
+  }
+
+  return SDValue();
+}
+
 // Custom lowering for any store, vector or scalar and/or default or with
 // a truncate operations.  Currently only custom lower truncate operation
 // from vector v4i16 to v4i8 or volatile stores of i128.
@@ -7859,18 +7891,32 @@ SDValue AArch64TargetLowering::LowerSTORE(SDValue Op,
   SDLoc Dl(Op);
   StoreSDNode *StoreNode = cast<StoreSDNode>(Op);
   assert (StoreNode && "Can only custom lower store nodes");
+  // llvm::outs() << "LOWERSTORE\nStore: ";
+  // StoreNode->dump();
 
   SDValue Value = StoreNode->getValue();
+  // llvm::outs() << "Value: ";
+  // Value->dump();
 
   EVT VT = Value.getValueType();
   EVT MemVT = StoreNode->getMemoryVT();
+  if (VT == MVT::v2i64)
+    return Op;
 
-  if (StoreNode->isNonTemporal()) {
+  if (StoreNode->isNonTemporal() && VT != MVT::v2i64) {
     if (auto MaybeSTNP = LowerNTStore(StoreNode, VT, MemVT, Dl, DAG))
       return MaybeSTNP;
   }
 
-  if (VT.isVector()) {
+  // if (VT == MVT::v2i64) {
+  //   if (auto Store = trySplitConstant128(StoreNode, DAG)) {
+  //     return Store;
+  //   } else {
+  //     return SDValue();
+  //   }
+  // }
+
+  if (VT.isVector() && VT != MVT::v2i64) {
     if (SDValue Store = tryLowerMultiVectorStore(StoreNode, DAG))
       return Store;
 
@@ -7910,6 +7956,27 @@ SDValue AArch64TargetLowering::LowerSTORE(SDValue Op,
     }
     return Chain;
   }
+
+  // // For stores that save constant <2 x i64> values, use two mov instructions
+  // // and a stp instruction if both i64 are elligable mov immediate values.
+  // if (Value.getOpcode() == ISD::BUILD_VECTOR &&
+  //     VT == MVT::v2i64 && Value.getNumOperands() == 2 &&
+  //     !ISD::isBuildVectorAllZeros(Value.getNode())) {
+  //   SDValue Chain = StoreNode->getChain();
+  //   SDValue Ptr = StoreNode->getBasePtr();
+  //   auto FV = Value.getOperand(0);
+  //   auto SV = Value.getOperand(1);
+  //   auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
+  //   auto *SC = dyn_cast<ConstantSDNode>(SV.getNode());
+  //   if (FC && SC && AArch64_AM::isAnyMOVWMovAlias(FC->getZExtValue(), 64) &&
+  //       AArch64_AM::isAnyMOVWMovAlias(SC->getZExtValue(), 64)) {
+  //     if (DAG.getDataLayout().isBigEndian())
+  //       std::swap(FV, SV);
+  //     return DAG.getMemIntrinsicNode(
+  //         AArch64ISD::STP, Dl, DAG.getVTList(MVT::Other), {Chain, FV, SV,
+  //         Ptr}, MemVT, StoreNode->getMemOperand());
+  //   }
+  // }
 
   return SDValue();
 }
@@ -27594,25 +27661,6 @@ static SDValue performSTORECombine(SDNode *N,
             trySimplifySrlAddToRshrnb(ST->getOperand(1), DAG, Subtarget)) {
       return DAG.getTruncStore(ST->getChain(), ST, Rshrnb, ST->getBasePtr(),
                                MemVT, ST->getMemOperand());
-    }
-  }
-
-  // For stores that save constant <2 x i64> values, use two mov instructions
-  // and a stp instruction if both i64 are elligable mov immediate values.
-  if (Value.getOpcode() == ISD::BUILD_VECTOR &&
-      Value.getValueType() == MVT::v2i64 && Value.getNumOperands() == 2 &&
-      !ISD::isBuildVectorAllZeros(Value.getNode())) {
-    auto FV = Value.getOperand(0);
-    auto SV = Value.getOperand(1);
-    auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
-    auto *SC = dyn_cast<ConstantSDNode>(SV.getNode());
-    if (FC && SC && AArch64_AM::isAnyMOVWMovAlias(FC->getZExtValue(), 64) &&
-        AArch64_AM::isAnyMOVWMovAlias(SC->getZExtValue(), 64)) {
-      if (DAG.getDataLayout().isBigEndian())
-        std::swap(FV, SV);
-      return DAG.getMemIntrinsicNode(
-          AArch64ISD::STP, DL, DAG.getVTList(MVT::Other), {Chain, FV, SV, Ptr},
-          MemVT, ST->getMemOperand());
     }
   }
 
