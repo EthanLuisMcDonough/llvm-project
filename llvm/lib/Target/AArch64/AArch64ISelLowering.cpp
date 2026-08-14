@@ -7901,7 +7901,7 @@ SDValue AArch64TargetLowering::LowerSTORE(SDValue Op,
   EVT VT = Value.getValueType();
   EVT MemVT = StoreNode->getMemoryVT();
   if (VT == MVT::v2i64)
-    return Op;
+    return SDValue();
 
   if (StoreNode->isNonTemporal() && VT != MVT::v2i64) {
     if (auto MaybeSTNP = LowerNTStore(StoreNode, VT, MemVT, Dl, DAG))
