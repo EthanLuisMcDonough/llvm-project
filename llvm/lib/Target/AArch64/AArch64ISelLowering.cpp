@@ -27537,6 +27537,65 @@ static SDValue
 performInterleavedStoreCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
                                SelectionDAG &DAG);
 
+// Rewrite store instructions that save constant <2 x i64> values as stp
+// instructions
+static SDValue splitConst128VectorStore(StoreSDNode *ST, SelectionDAG &DAG,
+                                        const AArch64Subtarget *Subtarget) {
+  SDValue Chain = ST->getChain();
+  SDValue Value = ST->getValue();
+  SDValue Ptr = ST->getBasePtr();
+  EVT MemVT = ST->getMemoryVT();
+  SDLoc DL(ST);
+
+  if (Value.getValueType() != MVT::v2i64)
+    return SDValue();
+  SDValue FV, SV;
+
+  // For non-SVE targets, use two mov instructions and a stp instruction if
+  // both i64 are elligable mov immediate values.
+  if (Value.getOpcode() == ISD::BUILD_VECTOR && Value.getNumOperands() == 2 &&
+      !ISD::isBuildVectorAllZeros(Value.getNode()) &&
+      !Subtarget->isSVEorStreamingSVEAvailable()) {
+    FV = Value.getOperand(0);
+    SV = Value.getOperand(1);
+    auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
+    auto *SC = dyn_cast<ConstantSDNode>(SV.getNode());
+    if (!FC || !SC || !AArch64_AM::isAnyMOVWMovAlias(FC->getZExtValue(), 64) ||
+        !AArch64_AM::isAnyMOVWMovAlias(SC->getZExtValue(), 64))
+      return SDValue();
+  }
+
+  // For stores that save a computed index vector, get the start and step
+  // values. If neither bound can be folded into a simm5 value, rewrite
+  // the store as a stp instruction.
+  else if (Value.getOpcode() == ISD::EXTRACT_SUBVECTOR) {
+    auto AN = Value.getOperand(0);
+    if (AN.getOpcode() != ISD::ADD)
+      return SDValue();
+
+    auto Arg1 = AN.getOperand(0);
+    auto Arg2 = AN.getOperand(1);
+    if (Arg1.getOpcode() != ISD::STEP_VECTOR ||
+        Arg2.getOpcode() != ISD::SPLAT_VECTOR)
+      return SDValue();
+
+    FV = Arg2.getOperand(0);
+    auto *C1 = dyn_cast<ConstantSDNode>(Arg1.getOperand(0).getNode());
+    auto *C2 = dyn_cast<ConstantSDNode>(FV.getNode());
+    if (!C1 || !C2 || C1->getZExtValue() < 32 || C2->getZExtValue() < 32)
+      return SDValue();
+    SV = DAG.getConstant(C1->getZExtValue() + C2->getZExtValue(), DL, MVT::i64);
+  } else {
+    return SDValue();
+  }
+
+  if (DAG.getDataLayout().isBigEndian())
+    std::swap(FV, SV);
+  return DAG.getMemIntrinsicNode(AArch64ISD::STP, DL, DAG.getVTList(MVT::Other),
+                                 {Chain, FV, SV, Ptr}, MemVT,
+                                 ST->getMemOperand());
+}
+
 static SDValue performSTORECombine(SDNode *N,
                                    TargetLowering::DAGCombinerInfo &DCI,
                                    SelectionDAG &DAG,
@@ -27630,25 +27689,8 @@ static SDValue performSTORECombine(SDNode *N,
     }
   }
 
-  // For stores that save constant <2 x i64> values, use two mov instructions
-  // and a stp instruction if both i64 are elligable mov immediate values.
-  if (Value.getOpcode() == ISD::BUILD_VECTOR &&
-      Value.getValueType() == MVT::v2i64 && Value.getNumOperands() == 2 &&
-      !ISD::isBuildVectorAllZeros(Value.getNode()) &&
-      !Subtarget->isSVEorStreamingSVEAvailable()) {
-    auto FV = Value.getOperand(0);
-    auto SV = Value.getOperand(1);
-    auto *FC = dyn_cast<ConstantSDNode>(FV.getNode());
-    auto *SC = dyn_cast<ConstantSDNode>(SV.getNode());
-    if (FC && SC && AArch64_AM::isAnyMOVWMovAlias(FC->getZExtValue(), 64) &&
-        AArch64_AM::isAnyMOVWMovAlias(SC->getZExtValue(), 64)) {
-      if (DAG.getDataLayout().isBigEndian())
-        std::swap(FV, SV);
-      return DAG.getMemIntrinsicNode(
-          AArch64ISD::STP, DL, DAG.getVTList(MVT::Other), {Chain, FV, SV, Ptr},
-          MemVT, ST->getMemOperand());
-    }
-  }
+  if (auto Value = splitConst128VectorStore(ST, DAG, Subtarget))
+    return Value;
 
   // This is an integer vector_extract_elt followed by a (possibly truncating)
   // store. We may be able to replace this with a store of an FP subregister.
