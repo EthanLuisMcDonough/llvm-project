@@ -8,9 +8,10 @@ target triple = "aarch64-unknown-linux-gnu"
 define void @store_trunc_v2i64i8(ptr %ap, ptr %dest) vscale_range(2,0) #0 {
 ; CHECK-LABEL: store_trunc_v2i64i8:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    ptrue p0.d, vl2
 ; CHECK-NEXT:    ldr q0, [x0]
-; CHECK-NEXT:    st1b { z0.d }, p0, [x1]
+; CHECK-NEXT:    mov d1, v0.d[1]
+; CHECK-NEXT:    str b0, [x1]
+; CHECK-NEXT:    stur b1, [x1, #1]
 ; CHECK-NEXT:    ret
   %a = load <2 x i64>, ptr %ap
   %val = trunc <2 x i64> %a to <2 x i8>

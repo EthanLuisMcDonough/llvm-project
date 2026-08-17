@@ -1710,12 +1710,16 @@ define void @test_stnp_interleaved_store4_v4i32(<4 x i32> %v0, <4 x i32> %v1, <4
 ; CHECK-BE-IADISABLED-NEXT:    mov v7.d[1], v5.d[1]
 ; CHECK-BE-IADISABLED-NEXT:    mov v4.d[1], v3.d[1]
 ; CHECK-BE-IADISABLED-NEXT:    mov v0.d[1], v1.d[1]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v6.2d }, [x8]
+; CHECK-BE-IADISABLED-NEXT:    rev64 v1.4s, v6.4s
+; CHECK-BE-IADISABLED-NEXT:    rev64 v2.4s, v7.4s
+; CHECK-BE-IADISABLED-NEXT:    rev64 v3.4s, v4.4s
+; CHECK-BE-IADISABLED-NEXT:    rev64 v0.4s, v0.4s
+; CHECK-BE-IADISABLED-NEXT:    st1 { v1.4s }, [x8]
 ; CHECK-BE-IADISABLED-NEXT:    add x8, x0, #16
-; CHECK-BE-IADISABLED-NEXT:    st1 { v7.2d }, [x8]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v2.4s }, [x8]
 ; CHECK-BE-IADISABLED-NEXT:    add x8, x0, #48
-; CHECK-BE-IADISABLED-NEXT:    st1 { v4.2d }, [x8]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v0.2d }, [x0]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v3.4s }, [x8]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v0.4s }, [x0]
 ; CHECK-BE-IADISABLED-NEXT:    ret
 entry:
   %s0 = shufflevector <4 x i32> %v0, <4 x i32> %v1, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>

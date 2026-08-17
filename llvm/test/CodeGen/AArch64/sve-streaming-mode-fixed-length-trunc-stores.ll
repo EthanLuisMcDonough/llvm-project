@@ -104,9 +104,8 @@ define void @store_trunc_v4i32i16(ptr %ap, ptr %dest) {
 define void @store_trunc_v2i64i8(ptr %ap, ptr %dest) {
 ; CHECK-LABEL: store_trunc_v2i64i8:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    ptrue p0.d, vl2
-; CHECK-NEXT:    ldr q0, [x0]
-; CHECK-NEXT:    st1w { z0.d }, p0, [x1]
+; CHECK-NEXT:    ldp x9, x8, [x0]
+; CHECK-NEXT:    stp w9, w8, [x1]
 ; CHECK-NEXT:    ret
 ;
 ; NONEON-NOSVE-LABEL: store_trunc_v2i64i8:

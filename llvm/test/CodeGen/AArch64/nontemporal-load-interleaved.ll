@@ -1852,10 +1852,14 @@ define void @test_ldnp_interleaved_load4_v4i32(ptr %ptr, ptr %out0, ptr %out1, p
 ; CHECK-BE-IADISABLED-NEXT:    mov v2.d[1], v5.d[1]
 ; CHECK-BE-IADISABLED-NEXT:    mov v3.d[1], v7.d[1]
 ; CHECK-BE-IADISABLED-NEXT:    mov v1.d[1], v0.d[1]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v2.2d }, [x1]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v6.2d }, [x2]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v3.2d }, [x3]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v1.2d }, [x4]
+; CHECK-BE-IADISABLED-NEXT:    rev64 v0.4s, v2.4s
+; CHECK-BE-IADISABLED-NEXT:    rev64 v2.4s, v6.4s
+; CHECK-BE-IADISABLED-NEXT:    rev64 v3.4s, v3.4s
+; CHECK-BE-IADISABLED-NEXT:    rev64 v1.4s, v1.4s
+; CHECK-BE-IADISABLED-NEXT:    st1 { v0.4s }, [x1]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v2.4s }, [x2]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v3.4s }, [x3]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v1.4s }, [x4]
 ; CHECK-BE-IADISABLED-NEXT:    ret
 entry:
   %loaded = load <16 x i32>, ptr %ptr, align 4, !nontemporal !0
@@ -1980,10 +1984,14 @@ define void @test_ldnp_interleaved_load4_v8i16(ptr %ptr, ptr %out0, ptr %out1, p
 ; CHECK-BE-IADISABLED-NEXT:    mov v5.d[1], v4.d[1]
 ; CHECK-BE-IADISABLED-NEXT:    mov v7.d[1], v6.d[1]
 ; CHECK-BE-IADISABLED-NEXT:    mov v2.d[1], v1.d[1]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v3.2d }, [x1]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v5.2d }, [x2]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v7.2d }, [x3]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v2.2d }, [x4]
+; CHECK-BE-IADISABLED-NEXT:    rev64 v0.8h, v3.8h
+; CHECK-BE-IADISABLED-NEXT:    rev64 v1.8h, v5.8h
+; CHECK-BE-IADISABLED-NEXT:    rev64 v3.8h, v7.8h
+; CHECK-BE-IADISABLED-NEXT:    rev64 v2.8h, v2.8h
+; CHECK-BE-IADISABLED-NEXT:    st1 { v0.8h }, [x1]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v1.8h }, [x2]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v3.8h }, [x3]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v2.8h }, [x4]
 ; CHECK-BE-IADISABLED-NEXT:    ret
 entry:
   %loaded = load <32 x i16>, ptr %ptr, align 2, !nontemporal !0
@@ -2108,10 +2116,14 @@ define void @test_ldnp_interleaved_load4_v16i8(ptr %ptr, ptr %out0, ptr %out1, p
 ; CHECK-BE-IADISABLED-NEXT:    mov v5.d[1], v4.d[1]
 ; CHECK-BE-IADISABLED-NEXT:    mov v7.d[1], v6.d[1]
 ; CHECK-BE-IADISABLED-NEXT:    mov v0.d[1], v2.d[1]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v3.2d }, [x1]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v5.2d }, [x2]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v7.2d }, [x3]
-; CHECK-BE-IADISABLED-NEXT:    st1 { v0.2d }, [x4]
+; CHECK-BE-IADISABLED-NEXT:    rev64 v1.16b, v3.16b
+; CHECK-BE-IADISABLED-NEXT:    rev64 v2.16b, v5.16b
+; CHECK-BE-IADISABLED-NEXT:    rev64 v3.16b, v7.16b
+; CHECK-BE-IADISABLED-NEXT:    rev64 v0.16b, v0.16b
+; CHECK-BE-IADISABLED-NEXT:    st1 { v1.16b }, [x1]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v2.16b }, [x2]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v3.16b }, [x3]
+; CHECK-BE-IADISABLED-NEXT:    st1 { v0.16b }, [x4]
 ; CHECK-BE-IADISABLED-NEXT:    ret
 entry:
   %loaded = load <64 x i8>, ptr %ptr, align 1, !nontemporal !0
