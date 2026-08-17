@@ -643,9 +643,9 @@ define void @splat_imm_v4i64(ptr %a) {
 ;
 ; NONEON-NOSVE-LABEL: splat_imm_v4i64:
 ; NONEON-NOSVE:       // %bb.0:
-; NONEON-NOSVE-NEXT:    adrp x8, .LCPI27_0
-; NONEON-NOSVE-NEXT:    ldr q0, [x8, :lo12:.LCPI27_0]
-; NONEON-NOSVE-NEXT:    stp q0, q0, [x0]
+; NONEON-NOSVE-NEXT:    mov w8, #4 // =0x4
+; NONEON-NOSVE-NEXT:    stp x8, x8, [x0, #16]
+; NONEON-NOSVE-NEXT:    stp x8, x8, [x0]
 ; NONEON-NOSVE-NEXT:    ret
   store <4 x i64> splat (i64 4), ptr %a
   ret void
