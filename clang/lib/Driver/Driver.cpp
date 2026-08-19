@@ -2836,6 +2836,11 @@ bool Driver::HandleImmediateArgs(Compilation &C) {
     return false;
   }
 
+  if (C.getArgs().hasArg(options::OPT_print_multi_os_directory)) {
+    llvm::outs() << "../lib64\n";
+    return false;
+  }
+
   if (C.getArgs().hasArg(options::OPT_print_target_triple)) {
     llvm::outs() << TC.getTripleString() << "\n";
     return false;
