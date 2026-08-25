@@ -879,6 +879,37 @@ static bool isRewritableImplicitDef(const MachineInstr &MI,
   }
 }
 
+static bool isSplittableContantStore(const MachineInstr &MI) {
+  /*case AArch64::STRQui:
+  case AArch64::STURQi:
+  case AArch64::STR_ZXI:
+    return AArch64::STPQi;*/
+  
+  // switch (MI.getOpcode()) {
+  //   case AArch64::STRQui:
+  //   case AArch64::STURQi:
+  //   case AArch64::STR_ZXI:
+  //     break;
+  //   default:
+  //     return false;
+  // }
+  if (MI.getOpcode() != AArch64::STRQui)
+    return false;
+
+  LLVM_DEBUG(dbgs() << "MACHINE (" << MI.getNumMemOperands() << ") LOAD: ");
+  LLVM_DEBUG(MI.print(dbgs()));
+  for (const auto MOp : MI.operands()) {
+    LLVM_DEBUG(dbgs() << "MACHINE OPS: ");
+    LLVM_DEBUG(MOp.dump());
+  }
+  for (const auto *MemOp : MI.memoperands()) {
+    LLVM_DEBUG(dbgs() << "MACHINE MEMOP: ");
+    LLVM_DEBUG(MemOp->print(dbgs()));
+    //LLVM_DEBUG(dbgs() << *MemOp->getValue() << "\n");
+  }
+  return false;
+}
+
 MachineBasicBlock::iterator
 AArch64LoadStoreOpt::mergeNarrowZeroStores(MachineBasicBlock::iterator I,
                                            MachineBasicBlock::iterator MergeMI,
@@ -3288,6 +3319,14 @@ bool AArch64LoadStoreOpt::optimizeBlock(MachineBasicBlock &MBB,
   for (MachineBasicBlock::iterator MBBI = MBB.begin(), E = MBB.end();
        MBBI != E;) {
     if (tryToReplaceUMOVStore(MBBI))
+      Modified = true;
+    else
+      ++MBBI;
+  }
+
+  for (MachineBasicBlock::iterator MBBI = MBB.begin(), E = MBB.end();
+       MBBI != E;) {
+    if (isSplittableContantStore(*MBBI))
       Modified = true;
     else
       ++MBBI;
