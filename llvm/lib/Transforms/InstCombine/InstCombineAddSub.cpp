@@ -1967,6 +1967,32 @@ Instruction *InstCombinerImpl::visitAdd(BinaryOperator &I) {
     }
   }
 
+  {
+    const APInt *Upper;
+    Value *C;
+    if (match(&I,
+              m_c_Add(m_Value(A), m_c_UMin(m_UMax(m_Value(B), m_One()),
+                                           // m_Value()
+                                           m_Sub(m_APInt(Upper), m_Value(C)))
+
+                      // m_c_UMax(
+                      //   m_c_UMin(
+                      //     m_Sub()
+                      //     m_ConstantInt(Upper),
+
+                      //   ),
+                      //   m_One()
+                      // )
+                      )) &&
+        A == B && B == C) {
+      ConstantRange CRA =
+          computeConstantRangeIncludingKnownBits(A, /*ForSigned=*/false, SQ);
+      // if (CRA.getLower().isOne() && CRA.getUpper().eq(*Upper))
+      llvm::outs() << "Range " << CRA << " for " << *A << "\n";
+      llvm::outs() << "GOTCHA " << *Upper << "\n";
+    }
+  }
+
   if (Instruction *R = tryFoldInstWithCtpopWithNot(&I))
     return R;
 
