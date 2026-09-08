@@ -1970,26 +1970,27 @@ Instruction *InstCombinerImpl::visitAdd(BinaryOperator &I) {
   {
     const APInt *Upper;
     Value *C;
-    if (match(&I,
-              m_c_Add(m_Value(A), m_c_UMin(m_UMax(m_Value(B), m_One()),
-                                           // m_Value()
-                                           m_Sub(m_APInt(Upper), m_Value(C)))
 
-                      // m_c_UMax(
-                      //   m_c_UMin(
-                      //     m_Sub()
-                      //     m_ConstantInt(Upper),
+    auto SubPat = m_OneUse(m_Sub(m_APInt(Upper), m_Value(C)));
+    auto XorPat = m_OneUse(m_Xor(m_Value(C), m_APInt(Upper)));
 
-                      //   ),
-                      //   m_One()
-                      // )
-                      )) &&
+    auto MaxPat = m_OneUse(m_c_UMax(m_Value(B), m_One()));
+    auto MinMaxSubPat = m_OneUse(m_c_UMin(MaxPat, SubPat));
+    auto MinMaxXorPat = m_OneUse(m_c_UMin(MaxPat, XorPat));
+
+    if ((match(&I, m_c_Add(m_Value(A), MinMaxSubPat)) ||
+         match(&I, m_c_Add(m_Value(A), MinMaxXorPat))) &&
         A == B && B == C) {
-      ConstantRange CRA =
-          computeConstantRangeIncludingKnownBits(A, /*ForSigned=*/false, SQ);
-      // if (CRA.getLower().isOne() && CRA.getUpper().eq(*Upper))
-      llvm::outs() << "Range " << CRA << " for " << *A << "\n";
-      llvm::outs() << "GOTCHA " << *Upper << "\n";
+      // TODO check for xor mask
+      ConstantRange CRA = computeConstantRange(A, /*ForSigned=*/false,
+                                               SQ.getWithInstruction(&I));
+      if (CRA.getLower().isNonNegative() && CRA.getUpper().eq(*Upper)) {
+        auto *Shl = BinaryOperator::CreateShl(LHS, ConstantInt::get(Ty, 1));
+        Shl->setHasNoSignedWrap(I.hasNoSignedWrap());
+        Shl->setHasNoUnsignedWrap(I.hasNoUnsignedWrap());
+      }
+      LLVM_DEBUG(dbgs() << "Range " << CRA << " for " << *A << "\n");
+      LLVM_DEBUG(dbgs() << "GOTCHA " << *Upper << "\n");
     }
   }
 
