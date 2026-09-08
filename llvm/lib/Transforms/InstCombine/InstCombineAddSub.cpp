@@ -1967,30 +1967,45 @@ Instruction *InstCombinerImpl::visitAdd(BinaryOperator &I) {
     }
   }
 
+  // add (umin (umax (sub C, X), 1), C), X --> umin (umax (shl X, 1), 1), C
+  // if X is known to be inside [0, C]
   {
     const APInt *Upper;
     Value *C;
 
     auto SubPat = m_OneUse(m_Sub(m_APInt(Upper), m_Value(C)));
-    auto XorPat = m_OneUse(m_Xor(m_Value(C), m_APInt(Upper)));
+    auto XorPat = m_OneUse(m_c_Xor(m_Value(C), m_APInt(Upper)));
 
     auto MaxPat = m_OneUse(m_c_UMax(m_Value(B), m_One()));
     auto MinMaxSubPat = m_OneUse(m_c_UMin(MaxPat, SubPat));
+
+    // Check if C - X has been rewritten as X xor C.
     auto MinMaxXorPat = m_OneUse(m_c_UMin(MaxPat, XorPat));
 
+    // Match add (umin (umax (sub C, X), 1), C), X
+    // or add (umin (umax (xor X, C), 1), C), X
+    // If the xor version is matched, check that C is a mask value.
+    // In either case, make sure that C is not larger than the type's
+    // signed max to prevent overflow when multiplying by two.
     if ((match(&I, m_c_Add(m_Value(A), MinMaxSubPat)) ||
-         match(&I, m_c_Add(m_Value(A), MinMaxXorPat))) &&
-        A == B && B == C) {
-      // TODO check for xor mask
+         (match(&I, m_c_Add(m_Value(A), MinMaxXorPat)) && Upper->isMask())) &&
+        A == B && B == C &&
+        Upper->ule(APInt::getSignedMaxValue(Ty->getScalarSizeInBits()))) {
       ConstantRange CRA = computeConstantRange(A, /*ForSigned=*/false,
                                                SQ.getWithInstruction(&I));
-      if (CRA.getLower().isNonNegative() && CRA.getUpper().eq(*Upper)) {
-        auto *Shl = BinaryOperator::CreateShl(LHS, ConstantInt::get(Ty, 1));
-        Shl->setHasNoSignedWrap(I.hasNoSignedWrap());
-        Shl->setHasNoUnsignedWrap(I.hasNoUnsignedWrap());
+      // Check if X is known to be inside [0, C].
+      if (CRA.getLower().isNonNegative() && CRA.getUnsignedMax().ule(*Upper)) {
+        auto *One = ConstantInt::get(Ty, 1);
+        return replaceInstUsesWith(
+            I, Builder.CreateIntrinsic(
+                   Intrinsic::umax, {Ty},
+                   {One, Builder.CreateIntrinsic(
+                             Intrinsic::umin, {Ty},
+                             {Builder.CreateShl(A, One, "mul2",
+                                                I.hasNoUnsignedWrap(),
+                                                I.hasNoSignedWrap()),
+                              ConstantInt::get(Ty, *Upper)})}));
       }
-      LLVM_DEBUG(dbgs() << "Range " << CRA << " for " << *A << "\n");
-      LLVM_DEBUG(dbgs() << "GOTCHA " << *Upper << "\n");
     }
   }
 
