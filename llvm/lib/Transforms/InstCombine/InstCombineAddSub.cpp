@@ -1967,46 +1967,15 @@ Instruction *InstCombinerImpl::visitAdd(BinaryOperator &I) {
     }
   }
 
-  // add (umin (umax (sub C, X), 1), C), X --> umin (umax (shl X, 1), 1), C
-  // if X is known to be inside [0, C]
-  {
-    const APInt *Upper;
-    Value *C;
-
-    auto SubPat = m_OneUse(m_Sub(m_APInt(Upper), m_Value(C)));
-    auto XorPat = m_OneUse(m_c_Xor(m_Value(C), m_APInt(Upper)));
-
-    auto MaxPat = m_OneUse(m_c_UMax(m_Value(B), m_One()));
-    auto MinMaxSubPat = m_OneUse(m_c_UMin(MaxPat, SubPat));
-
-    // Check if C - X has been rewritten as X xor C.
-    auto MinMaxXorPat = m_OneUse(m_c_UMin(MaxPat, XorPat));
-
-    // Match add (umin (umax (sub C, X), 1), C), X
-    // or add (umin (umax (xor X, C), 1), C), X
-    // If the xor version is matched, check that C is a mask value.
-    // In either case, make sure that C is not larger than the type's
-    // signed max to prevent overflow when multiplying by two.
-    if ((match(&I, m_c_Add(m_Value(A), MinMaxSubPat)) ||
-         (match(&I, m_c_Add(m_Value(A), MinMaxXorPat)) && Upper->isMask())) &&
-        A == B && B == C &&
-        Upper->ule(APInt::getSignedMaxValue(Ty->getScalarSizeInBits()))) {
-      ConstantRange CRA = computeConstantRange(A, /*ForSigned=*/false,
-                                               SQ.getWithInstruction(&I));
-      // Check if X is known to be inside [0, C].
-      if (CRA.getLower().isNonNegative() && CRA.getUnsignedMax().ule(*Upper)) {
-        auto *One = ConstantInt::get(Ty, 1);
-        return replaceInstUsesWith(
-            I, Builder.CreateIntrinsic(
-                   Intrinsic::umax, {Ty},
-                   {One, Builder.CreateIntrinsic(
-                             Intrinsic::umin, {Ty},
-                             {Builder.CreateShl(A, One, "mul2",
-                                                I.hasNoUnsignedWrap(),
-                                                I.hasNoSignedWrap()),
-                              ConstantInt::get(Ty, *Upper)})}));
-      }
-    }
+  // X + umax(X, 1) --> umax(X << 1, 1)
+  if (match(&I, m_c_Add(m_Value(A), m_OneUse(m_c_UMax(m_Value(B), m_One())))) &&
+      A == B && (I.hasNoUnsignedWrap() || I.hasNoSignedWrap())) {
+    auto One = ConstantInt::get(Ty, 1);
+    return replaceInstUsesWith(
+        I, Builder.CreateIntrinsic(
+               Intrinsic::umax, {Ty},
+               {One, Builder.CreateShl(A, One, "mul2", I.hasNoUnsignedWrap(),
+                                       I.hasNoSignedWrap())}));
   }
 
   if (Instruction *R = tryFoldInstWithCtpopWithNot(&I))
