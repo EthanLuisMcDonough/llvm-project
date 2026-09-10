@@ -194,6 +194,9 @@ public:
   bool isExtPartOfAvgExpr(const Instruction *ExtUser, Type *Dst,
                           Type *Src) const;
 
+  bool isMulPartOfMulhExpr(const Instruction *MI) const;
+  bool isTruncPartOfMulhExpr(const TruncInst *TI) const;
+
   InstructionCost
   getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
                    TTI::CastContextHint CCH, TTI::TargetCostKind CostKind,

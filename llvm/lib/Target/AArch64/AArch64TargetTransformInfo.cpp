@@ -3853,6 +3853,46 @@ bool AArch64TTIImpl::isExtPartOfAvgExpr(const Instruction *ExtUser, Type *Dst,
   return false;
 }
 
+// s/umulh instructions implement the following pattern, making the
+// casts free:
+//   %x = mul ((s/zext i64 -> i128), (s/zext i64 -> i128))
+//   trunc i28 (lshr (%x, 64)) -> i64
+//
+bool AArch64TTIImpl::isTruncPartOfMulhExpr(const TruncInst *TI) const {
+  auto *Src = TI->getSrcTy();
+  auto *Dst = TI->getDestTy();
+  EVT SrcTy = TLI->getValueType(DL, Src);
+  EVT DstTy = TLI->getValueType(DL, Dst);
+
+  // TODO: more checks?
+  if (SrcTy.getScalarType() != MVT::i128 || DstTy.getScalarType() != MVT::i64 ||
+      !ST->hasSVE2())
+    return false;
+
+  Value *LHS, *RHS;
+  auto ExtPat =
+      m_OneUse(m_SpecificType(Src, m_ZExtOrSExt(m_SpecificType(Dst))));
+  auto MulPat = m_OneUse(m_Mul(m_Value(LHS, ExtPat), m_Value(RHS, ExtPat)));
+  auto ShiftPat = m_OneUse(m_Shr(MulPat, m_SpecificInt(64)));
+
+  return match(TI->getOperand(0), ShiftPat) &&
+         cast<Instruction>(LHS)->getOpcode() ==
+             cast<Instruction>(RHS)->getOpcode();
+}
+
+// Travel down mul instruction users to find the root of a s/umulh instruction
+bool AArch64TTIImpl::isMulPartOfMulhExpr(const Instruction *MI) const {
+  if (MI->getOpcode() != Instruction::Mul)
+    return false;
+
+  auto *Shr = dyn_cast_or_null<Instruction>(MI->getUniqueUndroppableUser());
+  if (!Shr || Shr->getOpcode() != Instruction::LShr)
+    return false;
+
+  auto *Trunc = dyn_cast_or_null<TruncInst>(Shr->getUniqueUndroppableUser());
+  return Trunc && isTruncPartOfMulhExpr(Trunc);
+}
+
 InstructionCost AArch64TTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst,
                                                  Type *Src,
                                                  TTI::CastContextHint CCH,
@@ -3900,8 +3940,14 @@ InstructionCost AArch64TTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst,
 
     // The cast will be free for the s/urhadd instructions
     if ((isa<ZExtInst>(I) || isa<SExtInst>(I)) &&
-        isExtPartOfAvgExpr(SingleUser, Dst, Src))
+        (isExtPartOfAvgExpr(SingleUser, Dst, Src) ||
+         isMulPartOfMulhExpr(SingleUser)))
       return 0;
+  }
+
+  if (I && isa<TruncInst>(I) && isTruncPartOfMulhExpr(cast<TruncInst>(I))) {
+    llvm::outs() << "HIT TRUNC\n";
+    return 0;
   }
 
   EVT SrcTy = TLI->getValueType(DL, Src);
