@@ -1315,14 +1315,14 @@ Instruction *InstCombinerImpl::matchSAddSubSat(IntrinsicInst &MinMax1) {
   // max(INT_MIN, min(INT_MAX, add(sext(A), sext(B))))
   // Where the min and max could be reversed
   Instruction *MinMax2;
-  BinaryOperator *AddSub;
+  BinaryOperator *AddSubShl;
   const APInt *MinValue, *MaxValue;
   if (match(&MinMax1, m_SMin(m_Instruction(MinMax2), m_APInt(MaxValue)))) {
-    if (!match(MinMax2, m_SMax(m_BinOp(AddSub), m_APInt(MinValue))))
+    if (!match(MinMax2, m_SMax(m_BinOp(AddSubShl), m_APInt(MinValue))))
       return nullptr;
   } else if (match(&MinMax1,
                    m_SMax(m_Instruction(MinMax2), m_APInt(MinValue)))) {
-    if (!match(MinMax2, m_SMin(m_BinOp(AddSub), m_APInt(MaxValue))))
+    if (!match(MinMax2, m_SMin(m_BinOp(AddSubShl), m_APInt(MaxValue))))
       return nullptr;
   } else
     return nullptr;
@@ -1339,29 +1339,35 @@ Instruction *InstCombinerImpl::matchSAddSubSat(IntrinsicInst &MinMax1) {
     return nullptr;
 
   // Also make sure that the inner min/max and the add/sub have one use.
-  if (!MinMax2->hasOneUse() || !AddSub->hasOneUse())
+  if (!MinMax2->hasOneUse() || !AddSubShl->hasOneUse())
     return nullptr;
 
   // Create the new type (which can be a vector type)
   Type *NewTy = Ty->getWithNewBitWidth(NewBitWidth);
 
+  Value *LHS = AddSubShl->getOperand(0);
+  Value *RHS = AddSubShl->getOperand(1);
+
   Intrinsic::ID IntrinsicID;
-  if (AddSub->getOpcode() == Instruction::Add)
+  if (AddSubShl->getOpcode() == Instruction::Add)
     IntrinsicID = Intrinsic::sadd_sat;
-  else if (AddSub->getOpcode() == Instruction::Sub)
+  else if (AddSubShl->getOpcode() == Instruction::Sub)
     IntrinsicID = Intrinsic::ssub_sat;
-  else
+  else if (match(AddSubShl, m_Shl(m_Value(), m_One()))) {
+    IntrinsicID = Intrinsic::sadd_sat;
+    RHS = nullptr;
+  } else
     return nullptr;
 
-  // The two operands of the add/sub must be nsw-truncatable to the NewTy. This
-  // is usually achieved via a sext from a smaller type.
-  if (ComputeMaxSignificantBits(AddSub->getOperand(0), AddSub) > NewBitWidth ||
-      ComputeMaxSignificantBits(AddSub->getOperand(1), AddSub) > NewBitWidth)
+  // The operand(s) of the add/sub/shl must be nsw-truncatable to the NewTy.
+  // This is usually achieved via a sext from a smaller type.
+  if (ComputeMaxSignificantBits(LHS, AddSubShl) > NewBitWidth ||
+      (RHS && ComputeMaxSignificantBits(RHS, AddSubShl) > NewBitWidth))
     return nullptr;
 
   // Finally create and return the sat intrinsic, truncated to the new type
-  Value *AT = Builder.CreateTrunc(AddSub->getOperand(0), NewTy);
-  Value *BT = Builder.CreateTrunc(AddSub->getOperand(1), NewTy);
+  Value *AT = Builder.CreateTrunc(LHS, NewTy);
+  Value *BT = RHS ? Builder.CreateTrunc(RHS, NewTy) : AT;
   Value *Sat = Builder.CreateIntrinsic(IntrinsicID, NewTy, {AT, BT});
   return CastInst::Create(Instruction::SExt, Sat, Ty);
 }
