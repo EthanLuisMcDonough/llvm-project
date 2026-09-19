@@ -1311,12 +1311,15 @@ static Instruction *moveAddAfterMinMax(IntrinsicInst *II,
 Instruction *InstCombinerImpl::matchSAddSubSat(IntrinsicInst &MinMax1) {
   Type *Ty = MinMax1.getType();
 
+  Instruction *MinMax2 = nullptr;
+  BinaryOperator *AddSubShl;
+  const APInt *MinValue = nullptr, *MaxValue;
+  Value *MinClampExpr;
+  bool Signed = true;
+
   // We are looking for a tree of:
   // max(INT_MIN, min(INT_MAX, add(sext(A), sext(B))))
   // Where the min and max could be reversed
-  Instruction *MinMax2;
-  BinaryOperator *AddSubShl;
-  const APInt *MinValue, *MaxValue;
   if (match(&MinMax1, m_SMin(m_Instruction(MinMax2), m_APInt(MaxValue)))) {
     if (!match(MinMax2, m_SMax(m_BinOp(AddSubShl), m_APInt(MinValue))))
       return nullptr;
@@ -1324,13 +1327,22 @@ Instruction *InstCombinerImpl::matchSAddSubSat(IntrinsicInst &MinMax1) {
                    m_SMax(m_Instruction(MinMax2), m_APInt(MinValue)))) {
     if (!match(MinMax2, m_SMin(m_BinOp(AddSubShl), m_APInt(MaxValue))))
       return nullptr;
+  }
+
+  // umin(INT_MAX, umax(add(A, B), C))
+  // Match umin(INT_MAX, add(A, B)) if A and B are non-negative
+  else if (match(&MinMax1, m_c_UMin(m_BinOp(AddSubShl), m_APInt(MaxValue)))) {
+    Signed = false;
   } else
     return nullptr;
 
+  llvm::outs() << "Matched " << MinValue << "\n";
   // Check that the constants clamp a saturate, and that the new type would be
   // sensible to convert to.
-  if (!(*MaxValue + 1).isPowerOf2() || -*MinValue != *MaxValue + 1)
+  if (!(*MaxValue + 1).isPowerOf2() ||
+      (MinValue && -*MinValue != *MaxValue + 1))
     return nullptr;
+  llvm::outs() << *MaxValue << "\n";
   // In what bitwidth can this be treated as saturating arithmetics?
   unsigned NewBitWidth = (*MaxValue + 1).logBase2() + 1;
   // FIXME: This isn't quite right for vectors, but using the scalar type is a
@@ -1338,26 +1350,43 @@ Instruction *InstCombinerImpl::matchSAddSubSat(IntrinsicInst &MinMax1) {
   if (!shouldChangeType(Ty->getScalarType()->getIntegerBitWidth(), NewBitWidth))
     return nullptr;
 
+  llvm::outs() << "1\n";
   // Also make sure that the inner min/max and the add/sub have one use.
-  if (!MinMax2->hasOneUse() || !AddSubShl->hasOneUse())
+  if (!AddSubShl->hasOneUse() || (MinMax2 && !MinMax2->hasOneUse()))
     return nullptr;
+
+  llvm::outs() << "2\n";
 
   // Create the new type (which can be a vector type)
   Type *NewTy = Ty->getWithNewBitWidth(NewBitWidth);
 
+  llvm::outs() << *NewTy << "\n";
   Value *LHS = AddSubShl->getOperand(0);
   Value *RHS = AddSubShl->getOperand(1);
 
   Intrinsic::ID IntrinsicID;
   if (AddSubShl->getOpcode() == Instruction::Add)
     IntrinsicID = Intrinsic::sadd_sat;
-  else if (AddSubShl->getOpcode() == Instruction::Sub)
+  else if (Signed && AddSubShl->getOpcode() == Instruction::Sub)
     IntrinsicID = Intrinsic::ssub_sat;
   else if (match(AddSubShl, m_Shl(m_Value(), m_One()))) {
     IntrinsicID = Intrinsic::sadd_sat;
     RHS = nullptr;
   } else
     return nullptr;
+
+  // GOOD IF Signed || (NonNeg(A) && (!B || NonNeg(B)))
+  // BAD IF !(Signed || (NonNeg(A) && (!B || NonNeg(B))))
+  // GOOD IF Unsigned && !(NonNeg(A) && (!B || NonNeg(B))))
+  // GOOD IF Unsigned && (!NonNeg(A) || !(!B || NonNeg(B))))
+  // GOOD IF Unsigned && (!NonNeg(A) || (B && !NonNeg(B))))
+
+  llvm::outs() << "A\n";
+  auto Q = SQ.getWithInstruction(&MinMax1);
+  if (!Signed &&
+      (!isKnownNonNegative(LHS, Q) || (RHS && !isKnownNonNegative(RHS, Q))))
+    return nullptr;
+  llvm::outs() << "B\n";
 
   // The operand(s) of the add/sub/shl must be nsw-truncatable to the NewTy.
   // This is usually achieved via a sext from a smaller type.
@@ -1367,6 +1396,7 @@ Instruction *InstCombinerImpl::matchSAddSubSat(IntrinsicInst &MinMax1) {
 
   // Finally create and return the sat intrinsic, truncated to the new type
   Value *AT = Builder.CreateTrunc(LHS, NewTy);
+  llvm::outs() << *AT << "\n";
   Value *BT = RHS ? Builder.CreateTrunc(RHS, NewTy) : AT;
   Value *Sat = Builder.CreateIntrinsic(IntrinsicID, NewTy, {AT, BT});
   return CastInst::Create(Instruction::SExt, Sat, Ty);
