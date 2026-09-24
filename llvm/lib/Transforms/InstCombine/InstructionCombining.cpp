@@ -1952,15 +1952,32 @@ Instruction *InstCombinerImpl::foldOpIntoPhi(Instruction &I, PHINode *PN,
   bool OneUse = PN->hasOneUse();
   bool IdenticalUsers = false;
   if (!AllowMultipleUses && !OneUse) {
+    IdenticalUsers = true;
+
     // Walk the use list for the instruction, comparing them to I.
     for (User *U : PN->users()) {
       Instruction *UI = cast<Instruction>(U);
-      if (UI != &I && !I.isIdenticalTo(UI))
-        return nullptr;
+      if (UI != &I && !I.isIdenticalTo(UI)) {
+        IdenticalUsers = false;
+        break;
+      }
     }
     // Otherwise, we can replace *all* users with the new PHI we form.
-    IdenticalUsers = true;
+    // IdenticalUsers = true;
   }
+
+  auto *PhiSink = PN->user_back();
+  bool AllDominated = !IdenticalUsers && (OneUse || &I == PhiSink);
+  if (!AllDominated) {
+    for (const auto &U : I.uses()) {
+      if (!DT.dominates(PhiSink, U)) {
+        llvm::outs() << "DOMINATED: " << *U << "\n";
+        AllDominated = false;
+        break;
+      }
+    }
+  }
+  llvm::outs() << "AllDominated for " << I << " = " << AllDominated << "\n";
 
   // Check that all operands are phi-translatable.
   for (Value *Op : I.operands()) {
@@ -1981,6 +1998,7 @@ Instruction *InstCombinerImpl::foldOpIntoPhi(Instruction &I, PHINode *PN,
     if (DT.dominates(I, PN->getParent()))
       continue;
 
+    llvm::outs() << "Bad operand: " << *Op << "\n";
     // Not phi-translatable, bail out.
     return nullptr;
   }
@@ -2027,7 +2045,7 @@ Instruction *InstCombinerImpl::foldOpIntoPhi(Instruction &I, PHINode *PN,
       continue;
     }
 
-    if (!OneUse && !IdenticalUsers)
+    if (!OneUse && !IdenticalUsers && !AllDominated)
       return nullptr;
 
     if (SeenNonSimplifiedInVal)
