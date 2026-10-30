@@ -662,8 +662,7 @@ public:
   /// Given a binary operator, cast instruction, or select which has a PHI node
   /// as operand #0, see if we can fold the instruction into the PHI (which is
   /// only possible if all operands to the PHI are constants).
-  Instruction *foldOpIntoPhi(Instruction &I, PHINode *PN,
-                             bool AllowMultipleUses = false);
+  Instruction *foldOpIntoPhi(Instruction &I, PHINode *PN);
 
   /// Try to fold binary operators whose operands are simple interleaved
   /// recurrences to a single recurrence. This is a common pattern in reduction

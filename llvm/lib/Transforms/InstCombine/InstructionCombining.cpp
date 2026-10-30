@@ -1966,8 +1966,7 @@ Instruction *InstCombinerImpl::foldBinOpSelectBinOp(BinaryOperator &Op) {
   return BinaryOperator::Create(Op.getOpcode(), NewSI, Input);
 }
 
-Instruction *InstCombinerImpl::foldOpIntoPhi(Instruction &I, PHINode *PN,
-                                             bool AllowMultipleUses) {
+Instruction *InstCombinerImpl::foldOpIntoPhi(Instruction &I, PHINode *PN) {
   unsigned NumPHIValues = PN->getNumIncomingValues();
   if (NumPHIValues == 0)
     return nullptr;
@@ -1976,16 +1975,13 @@ Instruction *InstCombinerImpl::foldOpIntoPhi(Instruction &I, PHINode *PN,
   // multiple uses and they are all the same operation, we can fold *all* of the
   // uses into the PHI.
   bool OneUse = PN->hasOneUse();
-  bool IdenticalUsers = false;
-  if (!AllowMultipleUses && !OneUse) {
-    // Walk the use list for the instruction, comparing them to I.
-    for (User *U : PN->users()) {
-      Instruction *UI = cast<Instruction>(U);
-      if (UI != &I && !I.isIdenticalTo(UI))
-        return nullptr;
+  bool IdenticalUsers = true;
+  for (User *U : PN->users()) {
+    Instruction *UI = cast<Instruction>(U);
+    if (UI != &I && !I.isIdenticalTo(UI)) {
+      IdenticalUsers = false;
+      break;
     }
-    // Otherwise, we can replace *all* users with the new PHI we form.
-    IdenticalUsers = true;
   }
 
   // Check that all operands are phi-translatable.
@@ -2052,9 +2048,6 @@ Instruction *InstCombinerImpl::foldOpIntoPhi(Instruction &I, PHINode *PN,
       NewPhiValues.push_back(nullptr);
       continue;
     }
-
-    if (!OneUse && !IdenticalUsers)
-      return nullptr;
 
     if (SeenNonSimplifiedInVal)
       return nullptr; // More than one non-simplified value.
@@ -2129,9 +2122,8 @@ Instruction *InstCombinerImpl::foldOpIntoPhi(Instruction &I, PHINode *PN,
     OneUse = true;
   }
 
-  if (OneUse) {
+  if (OneUse)
     replaceAllDbgUsesWith(*PN, *NewPN, *PN, DT);
-  }
   return replaceInstUsesWith(I, NewPN);
 }
 
@@ -6327,6 +6319,7 @@ static bool combineInstructionsOverFunction(
     ++NumWorklistIterations;
     LLVM_DEBUG(dbgs() << "\n\nINSTCOMBINE ITERATION #" << Iteration << " on "
                       << F.getName() << "\n");
+    LLVM_DEBUG(F.dump());
 
     InstCombinerImpl IC(Worklist, F, AA, AC, TLI, TTI, DT, ORE, BFI, BPI, PSI,
                         DL, RPOT, CLOpts);

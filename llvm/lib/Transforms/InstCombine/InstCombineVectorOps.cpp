@@ -706,8 +706,7 @@ Instruction *InstCombinerImpl::visitExtractElementInst(ExtractElementInst &EI) {
         if (!DemandedElts.isAllOnes()) {
           APInt PoisonElts(NumElts, 0);
           if (Value *V = SimplifyDemandedVectorElts(
-                  SrcVec, DemandedElts, PoisonElts, 0 /* Depth */,
-                  true /* AllowMultipleUsers */)) {
+                  SrcVec, DemandedElts, PoisonElts, 0 /* Depth */)) {
             if (V != SrcVec) {
               Worklist.addValue(SrcVec);
               SrcVec->replaceAllUsesWith(V);
@@ -3111,7 +3110,7 @@ Instruction *InstCombinerImpl::visitShuffleVectorInst(ShuffleVectorInst &SVI) {
       }
     }
     if (auto *PN = dyn_cast<PHINode>(LHS)) {
-      if (Instruction *I = foldOpIntoPhi(SVI, PN, /*AllowMultipleUses=*/true))
+      if (Instruction *I = foldOpIntoPhi(SVI, PN))
         return I;
     }
   }
