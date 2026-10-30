@@ -614,8 +614,8 @@ define i64 @test15b(i64 %A, i1 %b) {
 ; CHECK-NEXT:    [[C:%.*]] = call i64 @test15a(i64 [[X_OFF64]])
 ; CHECK-NEXT:    br label [[TWO]]
 ; CHECK:       two:
-; CHECK-NEXT:    [[Y_OFF0:%.*]] = phi i64 [ [[A]], [[ENTRY]] ], [ [[C]], [[ONE]] ]
 ; CHECK-NEXT:    [[Y_OFF64]] = phi i64 [ [[A]], [[ENTRY]] ], [ 0, [[ONE]] ]
+; CHECK-NEXT:    [[Y_OFF0:%.*]] = phi i64 [ [[A]], [[ENTRY]] ], [ [[C]], [[ONE]] ]
 ; CHECK-NEXT:    [[D:%.*]] = call i64 @test15a(i64 [[Y_OFF64]])
 ; CHECK-NEXT:    [[D1:%.*]] = trunc i64 [[D]] to i1
 ; CHECK-NEXT:    br i1 [[D1]], label [[ONE]], label [[END:%.*]]
@@ -923,15 +923,16 @@ define i1 @test_multiple_identical_users_fmf(i1 %c, float %x) {
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    br i1 [[C:%.*]], label [[IF:%.*]], label [[ELSE:%.*]]
 ; CHECK:       if:
+; CHECK-NEXT:    [[TMP0:%.*]] = fadd nnan float [[X:%.*]], 1.000000e+00
+; CHECK-NEXT:    [[TMP1:%.*]] = fadd float [[X]], 1.000000e+00
+; CHECK-NEXT:    [[TMP2:%.*]] = fcmp uno float [[TMP1]], 0.000000e+00
 ; CHECK-NEXT:    br label [[M:%.*]]
 ; CHECK:       else:
 ; CHECK-NEXT:    br label [[M]]
 ; CHECK:       join:
-; CHECK-NEXT:    [[P:%.*]] = phi float [ [[X:%.*]], [[IF]] ], [ 2.000000e+00, [[ELSE]] ]
-; CHECK-NEXT:    [[U1:%.*]] = fadd nnan float [[P]], 1.000000e+00
+; CHECK-NEXT:    [[U1:%.*]] = phi float [ [[TMP0]], [[IF]] ], [ 3.000000e+00, [[ELSE]] ]
+; CHECK-NEXT:    [[R:%.*]] = phi i1 [ [[TMP2]], [[IF]] ], [ false, [[ELSE]] ]
 ; CHECK-NEXT:    call void @use.float(float [[U1]])
-; CHECK-NEXT:    [[U2:%.*]] = fadd float [[P]], 1.000000e+00
-; CHECK-NEXT:    [[R:%.*]] = fcmp uno float [[U2]], 0.000000e+00
 ; CHECK-NEXT:    ret i1 [[R]]
 ;
 entry:

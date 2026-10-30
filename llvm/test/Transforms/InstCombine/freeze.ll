@@ -1843,15 +1843,15 @@ define i32 @pr171435_2(ptr noundef %arg, i32 noundef %arg1) "instcombine-no-veri
 ; CHECK:       [[BB_5]]:
 ; CHECK-NEXT:    [[LOAD:%.*]] = load i32, ptr [[CALL]], align 1
 ; CHECK-NEXT:    [[CALL6:%.*]] = call i32 @llvm.bswap.i32(i32 [[LOAD]])
+; CHECK-NEXT:    [[TMP0:%.*]] = and i32 [[CALL6]], 1
+; CHECK-NEXT:    [[TMP1:%.*]] = ashr i32 [[CALL6]], 1
+; CHECK-NEXT:    [[TMP2:%.*]] = add nsw i32 [[TMP1]], [[TMP0]]
 ; CHECK-NEXT:    br label %[[BB_8:.*]]
 ; CHECK:       [[BB_7]]:
 ; CHECK-NEXT:    br label %[[BB_8]]
 ; CHECK:       [[BB_8]]:
-; CHECK-NEXT:    [[PHI9_FR:%.*]] = phi i32 [ [[CALL6]], %[[BB_5]] ], [ poison, %[[BB_7]] ]
-; CHECK-NEXT:    [[AND:%.*]] = and i32 [[PHI9_FR]], 1
-; CHECK-NEXT:    [[ASHR:%.*]] = lshr i32 [[PHI9_FR]], 1
-; CHECK-NEXT:    [[ADD:%.*]] = add nuw i32 [[ASHR]], [[AND]]
-; CHECK-NEXT:    [[ADD10:%.*]] = add i32 [[PHI]], [[ADD]]
+; CHECK-NEXT:    [[ADD:%.*]] = phi i32 [ [[TMP2]], %[[BB_5]] ], [ poison, %[[BB_7]] ]
+; CHECK-NEXT:    [[ADD10:%.*]] = add nsw i32 [[PHI]], [[ADD]]
 ; CHECK-NEXT:    [[ADD10_FR:%.*]] = freeze i32 [[ADD10]]
 ; CHECK-NEXT:    [[AND11:%.*]] = and i32 [[ADD10_FR]], 255
 ; CHECK-NEXT:    [[ICMP12:%.*]] = icmp eq i32 [[AND11]], 0

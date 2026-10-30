@@ -289,12 +289,12 @@ define i8 @simple_recurrence_intrinsic_multiuse_phi(i8 %n, i8 %a, i8 %b) {
 ; CHECK-LABEL: define i8 @simple_recurrence_intrinsic_multiuse_phi(
 ; CHECK-SAME: i8 [[N:%.*]], i8 [[A:%.*]], i8 [[B:%.*]]) {
 ; CHECK-NEXT:  [[ENTRY:.*]]:
+; CHECK-NEXT:    [[UMAX:%.*]] = call i8 @llvm.umax.i8(i8 [[A]], i8 [[B]])
 ; CHECK-NEXT:    br label %[[LOOP:.*]]
 ; CHECK:       [[LOOP]]:
 ; CHECK-NEXT:    [[IV:%.*]] = phi i8 [ [[IV_NEXT:%.*]], %[[LOOP]] ], [ 0, %[[ENTRY]] ]
-; CHECK-NEXT:    [[UMAX_ACC:%.*]] = phi i8 [ [[UMAX:%.*]], %[[LOOP]] ], [ [[A]], %[[ENTRY]] ]
+; CHECK-NEXT:    [[UMAX_ACC:%.*]] = phi i8 [ [[UMAX]], %[[LOOP]] ], [ [[A]], %[[ENTRY]] ]
 ; CHECK-NEXT:    call void @use(i8 [[UMAX_ACC]])
-; CHECK-NEXT:    [[UMAX]] = call i8 @llvm.umax.i8(i8 [[A]], i8 [[B]])
 ; CHECK-NEXT:    [[IV_NEXT]] = add nuw i8 [[IV]], 1
 ; CHECK-NEXT:    [[CMP:%.*]] = icmp ult i8 [[IV_NEXT]], [[N]]
 ; CHECK-NEXT:    br i1 [[CMP]], label %[[LOOP]], label %[[EXIT:.*]]

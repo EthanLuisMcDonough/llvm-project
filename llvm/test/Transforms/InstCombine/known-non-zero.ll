@@ -99,16 +99,14 @@ define void @D60846_miscompile(ptr %p) {
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    br label [[LOOP:%.*]]
 ; CHECK:       loop:
-; CHECK-NEXT:    [[I:%.*]] = phi i16 [ 0, [[ENTRY:%.*]] ], [ [[I_INC:%.*]], [[COMMON:%.*]] ]
-; CHECK-NEXT:    [[IS_ZERO:%.*]] = icmp eq i16 [[I]], 0
+; CHECK-NEXT:    [[IS_ZERO:%.*]] = phi i1 [ true, [[ENTRY:%.*]] ], [ false, [[COMMON:%.*]] ]
+; CHECK-NEXT:    [[IS_ONE:%.*]] = phi i1 [ false, [[ENTRY]] ], [ true, [[COMMON]] ]
 ; CHECK-NEXT:    br i1 [[IS_ZERO]], label [[COMMON]], label [[NON_ZERO:%.*]]
 ; CHECK:       non_zero:
-; CHECK-NEXT:    store i1 true, ptr [[P:%.*]], align 1
+; CHECK-NEXT:    store i1 [[IS_ONE]], ptr [[P:%.*]], align 1
 ; CHECK-NEXT:    br label [[COMMON]]
 ; CHECK:       common:
-; CHECK-NEXT:    [[I_INC]] = add nuw nsw i16 [[I]], 1
-; CHECK-NEXT:    [[LOOP_COND:%.*]] = icmp eq i16 [[I]], 0
-; CHECK-NEXT:    br i1 [[LOOP_COND]], label [[LOOP]], label [[EXIT:%.*]]
+; CHECK-NEXT:    br i1 [[IS_ZERO]], label [[LOOP]], label [[EXIT:%.*]]
 ; CHECK:       exit:
 ; CHECK-NEXT:    ret void
 ;

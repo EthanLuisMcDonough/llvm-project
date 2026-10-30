@@ -9,7 +9,7 @@ define void @pr71330(i32 %conv, i1 %tobool19.not4, i16 %lb) {
 ; CHECK:       for.cond7.preheader:
 ; CHECK-NEXT:    br i1 [[TOBOOL19_NOT4]], label [[FOR_COND7_PREHEADER_SPLIT_US:%.*]], label [[FOR_COND7:%.*]]
 ; CHECK:       for.cond7.preheader.split.us:
-; CHECK-NEXT:    br i1 true, label [[FOR_COND7_PREHEADER_SPLIT_US_SPLIT:%.*]], label [[FOR_COND7_US_US:%.*]]
+; CHECK-NEXT:    br i1 false, label [[FOR_COND7_US_US:%.*]], label [[FOR_COND7_PREHEADER_SPLIT_US_SPLIT:%.*]]
 ; CHECK:       for.cond7.us.us:
 ; CHECK-NEXT:    br i1 poison, label [[FOR_COND7_US_US]], label [[FOR_END25:%.*]]
 ; CHECK:       for.cond7.preheader.split.us.split:

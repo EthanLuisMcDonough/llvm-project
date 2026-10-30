@@ -695,13 +695,13 @@ define i1 @recursiveGEP_withPtrSub_maybeZero(ptr %val1) {
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    br label [[WHILE_COND_I:%.*]]
 ; CHECK:       while.cond.i:
-; CHECK-NEXT:    [[A_PN_I:%.*]] = phi ptr [ [[TEST_0_I:%.*]], [[WHILE_COND_I]] ], [ [[VAL1:%.*]], [[ENTRY:%.*]] ]
+; CHECK-NEXT:    [[BOOL:%.*]] = phi i1 [ false, [[WHILE_COND_I]] ], [ true, [[ENTRY:%.*]] ]
+; CHECK-NEXT:    [[A_PN_I:%.*]] = phi ptr [ [[TEST_0_I:%.*]], [[WHILE_COND_I]] ], [ [[VAL1:%.*]], [[ENTRY]] ]
 ; CHECK-NEXT:    [[TMP0:%.*]] = load i8, ptr [[A_PN_I]], align 2
 ; CHECK-NEXT:    [[TEST_0_I]] = getelementptr inbounds nuw i8, ptr [[A_PN_I]], i64 1
 ; CHECK-NEXT:    [[CMP3_NOT_I:%.*]] = icmp eq i8 [[TMP0]], 0
 ; CHECK-NEXT:    br i1 [[CMP3_NOT_I]], label [[WHILE_END_I:%.*]], label [[WHILE_COND_I]]
 ; CHECK:       while.end.i:
-; CHECK-NEXT:    [[BOOL:%.*]] = icmp eq ptr [[A_PN_I]], [[VAL1]]
 ; CHECK-NEXT:    ret i1 [[BOOL]]
 ;
 entry:
@@ -1123,10 +1123,11 @@ define i32 @issue_124275_wrong_br_direction(i32 noundef %inp) {
 ; CHECK-NEXT:    br i1 [[CMP_NE_NOT]], label [[B1:%.*]], label [[B0:%.*]]
 ; CHECK:       B0:
 ; CHECK-NEXT:    [[PHI_B0:%.*]] = phi i32 [ [[PHI_B1:%.*]], [[B1]] ], [ [[XOR_INP_NEG]], [[ENTRY:%.*]] ]
+; CHECK-NEXT:    [[TMP1:%.*]] = icmp eq i32 [[PHI_B0]], 0
 ; CHECK-NEXT:    br label [[B1]]
 ; CHECK:       B1:
+; CHECK-NEXT:    [[CMP_NE_B1_NOT:%.*]] = phi i1 [ [[TMP1]], [[B0]] ], [ true, [[ENTRY]] ]
 ; CHECK-NEXT:    [[PHI_B1]] = phi i32 [ [[PHI_B0]], [[B0]] ], [ 0, [[ENTRY]] ]
-; CHECK-NEXT:    [[CMP_NE_B1_NOT:%.*]] = icmp eq i32 [[PHI_B1]], 0
 ; CHECK-NEXT:    br i1 [[CMP_NE_B1_NOT]], label [[B0]], label [[END:%.*]]
 ; CHECK:       end:
 ; CHECK-NEXT:    ret i32 0

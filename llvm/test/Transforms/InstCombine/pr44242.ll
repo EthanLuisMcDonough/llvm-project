@@ -10,12 +10,12 @@ define float @sitofp(float %x) {
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    br label [[LOOP_HEADER:%.*]]
 ; CHECK:       loop_header:
-; CHECK-NEXT:    [[VAL:%.*]] = phi i32 [ 0, [[ENTRY:%.*]] ], [ [[VAL_INCR_CASTED:%.*]], [[LOOP:%.*]] ]
-; CHECK-NEXT:    [[VAL_CASTED:%.*]] = bitcast i32 [[VAL]] to float
-; CHECK-NEXT:    [[CMP:%.*]] = fcmp olt float [[X:%.*]], [[VAL_CASTED]]
+; CHECK-NEXT:    [[VAL_CASTED:%.*]] = phi float [ 0.000000e+00, [[ENTRY:%.*]] ], [ [[VAL_INCR:%.*]], [[LOOP:%.*]] ]
+; CHECK-NEXT:    [[VAL:%.*]] = phi i32 [ 0, [[ENTRY]] ], [ [[VAL_INCR_CASTED:%.*]], [[LOOP]] ]
+; CHECK-NEXT:    [[CMP:%.*]] = fcmp ogt float [[VAL_CASTED]], [[X:%.*]]
 ; CHECK-NEXT:    br i1 [[CMP]], label [[END:%.*]], label [[LOOP]]
 ; CHECK:       loop:
-; CHECK-NEXT:    [[VAL_INCR:%.*]] = fadd float [[VAL_CASTED]], 1.000000e+00
+; CHECK-NEXT:    [[VAL_INCR]] = fadd float [[VAL_CASTED]], 1.000000e+00
 ; CHECK-NEXT:    [[VAL_INCR_CASTED]] = bitcast float [[VAL_INCR]] to i32
 ; CHECK-NEXT:    br label [[LOOP_HEADER]]
 ; CHECK:       end:
@@ -44,12 +44,12 @@ define <2 x i16> @bitcast(float %x) {
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    br label [[LOOP_HEADER:%.*]]
 ; CHECK:       loop_header:
-; CHECK-NEXT:    [[VAL:%.*]] = phi i32 [ 0, [[ENTRY:%.*]] ], [ [[VAL_INCR_CASTED:%.*]], [[LOOP:%.*]] ]
-; CHECK-NEXT:    [[VAL_CASTED:%.*]] = bitcast i32 [[VAL]] to float
-; CHECK-NEXT:    [[CMP:%.*]] = fcmp olt float [[X:%.*]], [[VAL_CASTED]]
+; CHECK-NEXT:    [[VAL_CASTED:%.*]] = phi float [ 0.000000e+00, [[ENTRY:%.*]] ], [ [[VAL_INCR:%.*]], [[LOOP:%.*]] ]
+; CHECK-NEXT:    [[VAL:%.*]] = phi i32 [ 0, [[ENTRY]] ], [ [[VAL_INCR_CASTED:%.*]], [[LOOP]] ]
+; CHECK-NEXT:    [[CMP:%.*]] = fcmp ogt float [[VAL_CASTED]], [[X:%.*]]
 ; CHECK-NEXT:    br i1 [[CMP]], label [[END:%.*]], label [[LOOP]]
 ; CHECK:       loop:
-; CHECK-NEXT:    [[VAL_INCR:%.*]] = fadd float [[VAL_CASTED]], 1.000000e+00
+; CHECK-NEXT:    [[VAL_INCR]] = fadd float [[VAL_CASTED]], 1.000000e+00
 ; CHECK-NEXT:    [[VAL_INCR_CASTED]] = bitcast float [[VAL_INCR]] to i32
 ; CHECK-NEXT:    br label [[LOOP_HEADER]]
 ; CHECK:       end:
@@ -80,12 +80,12 @@ define void @store_volatile(float %x) {
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    br label [[LOOP_HEADER:%.*]]
 ; CHECK:       loop_header:
-; CHECK-NEXT:    [[VAL:%.*]] = phi i32 [ 0, [[ENTRY:%.*]] ], [ [[VAL_INCR_CASTED:%.*]], [[LOOP:%.*]] ]
-; CHECK-NEXT:    [[VAL_CASTED:%.*]] = bitcast i32 [[VAL]] to float
-; CHECK-NEXT:    [[CMP:%.*]] = fcmp olt float [[X:%.*]], [[VAL_CASTED]]
+; CHECK-NEXT:    [[VAL_CASTED:%.*]] = phi float [ 0.000000e+00, [[ENTRY:%.*]] ], [ [[VAL_INCR:%.*]], [[LOOP:%.*]] ]
+; CHECK-NEXT:    [[VAL:%.*]] = phi i32 [ 0, [[ENTRY]] ], [ [[VAL_INCR_CASTED:%.*]], [[LOOP]] ]
+; CHECK-NEXT:    [[CMP:%.*]] = fcmp ogt float [[VAL_CASTED]], [[X:%.*]]
 ; CHECK-NEXT:    br i1 [[CMP]], label [[END:%.*]], label [[LOOP]]
 ; CHECK:       loop:
-; CHECK-NEXT:    [[VAL_INCR:%.*]] = fadd float [[VAL_CASTED]], 1.000000e+00
+; CHECK-NEXT:    [[VAL_INCR]] = fadd float [[VAL_CASTED]], 1.000000e+00
 ; CHECK-NEXT:    [[VAL_INCR_CASTED]] = bitcast float [[VAL_INCR]] to i32
 ; CHECK-NEXT:    br label [[LOOP_HEADER]]
 ; CHECK:       end:

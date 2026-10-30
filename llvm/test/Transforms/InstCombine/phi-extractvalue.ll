@@ -495,10 +495,7 @@ define i32 @extractvalue_of_constant_phi_multiuse(i1 %c) {
 ; CHECK:       else:
 ; CHECK-NEXT:    br label [[JOIN]]
 ; CHECK:       join:
-; CHECK-NEXT:    [[PHI:%.*]] = phi { i32, i32 } [ { i32 1, i32 2 }, [[IF]] ], [ { i32 3, i32 4 }, [[ELSE]] ]
-; CHECK-NEXT:    [[EV0:%.*]] = extractvalue { i32, i32 } [[PHI]], 0
-; CHECK-NEXT:    [[EV1:%.*]] = extractvalue { i32, i32 } [[PHI]], 1
-; CHECK-NEXT:    [[ADD:%.*]] = add i32 [[EV0]], [[EV1]]
+; CHECK-NEXT:    [[ADD:%.*]] = phi i32 [ 3, [[IF]] ], [ 7, [[ELSE]] ]
 ; CHECK-NEXT:    ret i32 [[ADD]]
 ;
   br i1 %c, label %if, label %else

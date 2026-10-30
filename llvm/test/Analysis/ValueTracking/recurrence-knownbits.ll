@@ -275,11 +275,13 @@ exit:
 define i64 @test_ashr_wrong_op(i1 %c, i64 %start) {
 ; CHECK-LABEL: @test_ashr_wrong_op(
 ; CHECK-NEXT:  entry:
+; CHECK-NEXT:    [[TMP1:%.*]] = icmp eq i64 [[START:%.*]], 0
 ; CHECK-NEXT:    br label [[LOOP:%.*]]
 ; CHECK:       loop:
-; CHECK-NEXT:    [[IV_ASHR:%.*]] = phi i64 [ [[START:%.*]], [[ENTRY:%.*]] ], [ [[IV_ASHR_NEXT:%.*]], [[LOOP]] ]
-; CHECK-NEXT:    [[TMP0:%.*]] = icmp eq i64 [[IV_ASHR]], 0
+; CHECK-NEXT:    [[TMP0:%.*]] = phi i1 [ [[TMP1]], [[ENTRY:%.*]] ], [ [[TMP2:%.*]], [[LOOP]] ]
+; CHECK-NEXT:    [[IV_ASHR:%.*]] = phi i64 [ [[START]], [[ENTRY]] ], [ [[IV_ASHR_NEXT:%.*]], [[LOOP]] ]
 ; CHECK-NEXT:    [[IV_ASHR_NEXT]] = zext i1 [[TMP0]] to i64
+; CHECK-NEXT:    [[TMP2]] = xor i1 [[TMP0]], true
 ; CHECK-NEXT:    br i1 [[C:%.*]], label [[EXIT:%.*]], label [[LOOP]]
 ; CHECK:       exit:
 ; CHECK-NEXT:    [[RES:%.*]] = or i64 [[IV_ASHR]], 1023

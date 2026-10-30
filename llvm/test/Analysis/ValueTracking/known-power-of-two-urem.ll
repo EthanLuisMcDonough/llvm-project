@@ -358,14 +358,15 @@ define i64 @known_power_of_two_urem_loop_negative(i64 %size, i64 %a) {
 ; CHECK-LABEL: @known_power_of_two_urem_loop_negative(
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    [[START:%.*]] = shl nuw i64 1, [[A:%.*]]
+; CHECK-NEXT:    [[TMP0:%.*]] = icmp ne i64 [[A]], 0
 ; CHECK-NEXT:    br label [[FOR_BODY:%.*]]
 ; CHECK:       for.body:
-; CHECK-NEXT:    [[PHI:%.*]] = phi i64 [ [[START]], [[ENTRY:%.*]] ], [ [[I:%.*]], [[FOR_BODY]] ]
+; CHECK-NEXT:    [[ICMP:%.*]] = phi i1 [ [[TMP0]], [[ENTRY:%.*]] ], [ true, [[FOR_BODY]] ]
+; CHECK-NEXT:    [[PHI:%.*]] = phi i64 [ [[START]], [[ENTRY]] ], [ [[I:%.*]], [[FOR_BODY]] ]
 ; CHECK-NEXT:    [[SUM:%.*]] = phi i64 [ 0, [[ENTRY]] ], [ [[ADD:%.*]], [[FOR_BODY]] ]
 ; CHECK-NEXT:    [[UREM:%.*]] = urem i64 [[SIZE:%.*]], [[PHI]]
 ; CHECK-NEXT:    [[ADD]] = add nuw i64 [[SUM]], [[UREM]]
 ; CHECK-NEXT:    [[I]] = add nuw i64 [[PHI]], 1
-; CHECK-NEXT:    [[ICMP:%.*]] = icmp ugt i64 [[PHI]], 1
 ; CHECK-NEXT:    br i1 [[ICMP]], label [[FOR_BODY]], label [[FOR_END:%.*]]
 ; CHECK:       for.end:
 ; CHECK-NEXT:    ret i64 [[SUM]]

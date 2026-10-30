@@ -52,11 +52,10 @@ define i32 @pr8547(ptr %g) {
 ; CHECK-NEXT:  codeRepl:
 ; CHECK-NEXT:    br label [[FOR_COND:%.*]]
 ; CHECK:       for.cond:
-; CHECK-NEXT:    [[STOREMERGE:%.*]] = phi i32 [ 0, [[CODEREPL:%.*]] ], [ 5, [[FOR_COND]] ]
+; CHECK-NEXT:    [[TOBOOL:%.*]] = phi i1 [ true, [[CODEREPL:%.*]] ], [ false, [[FOR_COND]] ]
+; CHECK-NEXT:    [[CONV2:%.*]] = phi i32 [ 0, [[CODEREPL]] ], [ 64, [[FOR_COND]] ]
+; CHECK-NEXT:    [[STOREMERGE:%.*]] = phi i32 [ 0, [[CODEREPL]] ], [ 5, [[FOR_COND]] ]
 ; CHECK-NEXT:    store i32 [[STOREMERGE]], ptr [[G:%.*]], align 4
-; CHECK-NEXT:    [[TMP0:%.*]] = shl nuw nsw i32 [[STOREMERGE]], 6
-; CHECK-NEXT:    [[CONV2:%.*]] = and i32 [[TMP0]], 64
-; CHECK-NEXT:    [[TOBOOL:%.*]] = icmp eq i32 [[CONV2]], 0
 ; CHECK-NEXT:    br i1 [[TOBOOL]], label [[FOR_COND]], label [[CODEREPL2:%.*]]
 ; CHECK:       codeRepl2:
 ; CHECK-NEXT:    ret i32 [[CONV2]]

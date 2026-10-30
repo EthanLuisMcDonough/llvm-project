@@ -140,14 +140,14 @@ define void @iterator_distance_index(ptr %out, ptr %arr, i1 %skip) {
 ; CHECK-NEXT:    [[I2:%.*]] = phi i32 [ [[I_NEXT:%.*]], %[[OUTER_LATCH:.*]] ], [ 0, %[[ENTRY]] ]
 ; CHECK-NEXT:    br label %[[INNER_BODY_PREHEADER:.*]]
 ; CHECK:       [[INNER_BODY_PREHEADER]]:
-; CHECK-NEXT:    [[J1:%.*]] = phi i32 [ 0, %[[INNER_PREHEADER]] ], [ [[J_NEXT:%.*]], %[[INNER_EXIT:.*]] ]
-; CHECK-NEXT:    [[K_LT_J_PEEL_NOT:%.*]] = icmp eq i32 [[J1]], 0
+; CHECK-NEXT:    [[K_LT_J_PEEL_NOT:%.*]] = phi i1 [ true, %[[INNER_PREHEADER]] ], [ false, %[[INNER_EXIT:.*]] ]
+; CHECK-NEXT:    [[J1:%.*]] = phi i32 [ 0, %[[INNER_PREHEADER]] ], [ [[J_NEXT:%.*]], %[[INNER_EXIT]] ]
 ; CHECK-NEXT:    br i1 [[K_LT_J_PEEL_NOT]], label %[[INNER_EXIT]], label %[[INNER_BODY_PEEL_NEXT:.*]]
 ; CHECK:       [[INNER_BODY_PEEL_NEXT]]:
-; CHECK-NEXT:    [[K_LT_J_NOT:%.*]] = icmp eq i32 [[J1]], 1
+; CHECK-NEXT:    [[K_LT_J:%.*]] = icmp samesign ugt i32 [[J1]], 1
 ; CHECK-NEXT:    br label %[[INNER_BODY:.*]]
 ; CHECK:       [[INNER_BODY]]:
-; CHECK-NEXT:    br i1 [[K_LT_J_NOT]], label %[[INNER_EXIT]], label %[[INNER_BODY]], !llvm.loop [[LOOP4:![0-9]+]]
+; CHECK-NEXT:    br i1 [[K_LT_J]], label %[[INNER_BODY]], label %[[INNER_EXIT]], !llvm.loop [[LOOP4:![0-9]+]]
 ; CHECK:       [[INNER_EXIT]]:
 ; CHECK-NEXT:    [[SUB:%.*]] = sub nuw nsw i32 [[I2]], [[J1]]
 ; CHECK-NEXT:    [[IDX:%.*]] = zext nneg i32 [[SUB]] to i64
