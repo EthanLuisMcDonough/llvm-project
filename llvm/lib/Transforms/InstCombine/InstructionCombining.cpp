@@ -6319,7 +6319,6 @@ static bool combineInstructionsOverFunction(
     ++NumWorklistIterations;
     LLVM_DEBUG(dbgs() << "\n\nINSTCOMBINE ITERATION #" << Iteration << " on "
                       << F.getName() << "\n");
-    LLVM_DEBUG(F.dump());
 
     InstCombinerImpl IC(Worklist, F, AA, AC, TLI, TTI, DT, ORE, BFI, BPI, PSI,
                         DL, RPOT, CLOpts);
