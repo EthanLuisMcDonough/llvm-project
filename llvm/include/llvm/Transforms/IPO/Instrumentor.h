@@ -1155,6 +1155,7 @@ struct AtomicRMWIO final : public InstructionIO<Instruction::AtomicRMW> {
     PassPointerAS,
     PassBasePointerInfo,
     PassValOperand,
+    ReplaceValOperand,
     PassPrevValue,
     ReplacePrevValue,
     PassValueSize,
@@ -1221,6 +1222,9 @@ struct AtomicRMWIO final : public InstructionIO<Instruction::AtomicRMW> {
                                         InstrumentationConfig &IConf,
                                         InstrumentorIRBuilderTy &IIRB);
   LLVM_ABI static Value *getValOperand(Value &V, Type &Ty,
+                                       InstrumentationConfig &IConf,
+                                       InstrumentorIRBuilderTy &IIRB);
+  LLVM_ABI static Value *setValOperand(Value &V, Value &NewV,
                                        InstrumentationConfig &IConf,
                                        InstrumentorIRBuilderTy &IIRB);
   LLVM_ABI static Value *getOperation(Value &V, Type &Ty,

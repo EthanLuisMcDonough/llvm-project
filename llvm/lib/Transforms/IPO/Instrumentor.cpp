@@ -1502,6 +1502,11 @@ void AtomicRMWIO::init(InstrumentationConfig &IConf,
   bool IsPRE = getLocationKind() == InstrumentationLocation::INSTRUCTION_PRE;
   if (UserConfig)
     Config = *UserConfig;
+
+  bool ReplacePassVal = IsPRE && Config.has(ReplaceValOperand);
+  bool ReplacePrevVal = IsPRE && Config.has(ReplacePrevValue);
+  bool PackedReturn = IsPRE && Config.has(ReplaceValOperand); // TODO
+
   if (Config.has(PassPointer)) {
     IRTArgs.push_back(
         IRTArg(IIRB.PtrTy, "pointer", "The accessed pointer.",
@@ -1520,23 +1525,29 @@ void AtomicRMWIO::init(InstrumentationConfig &IConf,
                              IRTArg::NONE, getBasePointerInfo));
   }
   if (Config.has(PassValOperand)) {
+    auto ReplaceFlag =
+        (ReplacePassVal
+             ? (ReplacePrevVal ? IRTArg::REPLACABLE_CUSTOM : IRTArg::REPLACABLE)
+             : IRTArg::NONE);
     IRTArgs.push_back(
         IRTArg(IIRB.Int64Ty, "val_operand",
                "The operand being atomically applied to the stored value.",
-               IRTArg::POTENTIALLY_INDIRECT |
+               ReplaceFlag | IRTArg::POTENTIALLY_INDIRECT |
                    (Config.has(PassValueSize) ? IRTArg::INDIRECT_HAS_SIZE
                                               : IRTArg::NONE),
-               getValOperand));
+               getValOperand, ReplacePassVal ? setValOperand : nullptr));
   }
   if (!IsPRE && Config.has(PassPrevValue)) {
-    IRTArgs.push_back(IRTArg(
-        getValueType(IIRB), "prev_value", "The unmodified old value.",
-        Config.has(ReplacePrevValue)
-            ? IRTArg::REPLACABLE | IRTArg::POTENTIALLY_INDIRECT |
-                  (Config.has(PassValueSize) ? IRTArg::INDIRECT_HAS_SIZE
-                                             : IRTArg::NONE)
-            : IRTArg::NONE,
-        getValue, Config.has(ReplacePrevValue) ? replaceValue : nullptr));
+    auto ReplaceFlag =
+        (ReplacePrevVal
+             ? (ReplacePassVal ? IRTArg::REPLACABLE_CUSTOM : IRTArg::REPLACABLE)
+             : IRTArg::NONE);
+    IRTArgs.push_back(
+        IRTArg(getValueType(IIRB), "prev_value", "The unmodified old value.",
+               ReplaceFlag | IRTArg::POTENTIALLY_INDIRECT |
+                   (Config.has(PassValueSize) ? IRTArg::INDIRECT_HAS_SIZE
+                                              : IRTArg::NONE),
+               getValue, ReplacePrevVal ? replaceValue : nullptr));
   }
   if (Config.has(PassValueSize)) {
     IRTArgs.push_back(IRTArg(IIRB.Int64Ty, "value_size",
@@ -1666,6 +1677,14 @@ Value *AtomicRMWIO::getValOperand(Value &V, Type &Ty,
                                   InstrumentorIRBuilderTy &IIRB) {
   auto &AI = cast<AtomicRMWInst>(V);
   return AI.getValOperand();
+}
+
+Value *AtomicRMWIO::setValOperand(Value &V, Value &NewV,
+                                  InstrumentationConfig &IConf,
+                                  InstrumentorIRBuilderTy &IIRB) {
+  auto &AI = cast<AtomicRMWInst>(V);
+  AI.setOperand(1, &V);
+  return &AI;
 }
 
 Value *AtomicRMWIO::getOperation(Value &V, Type &Ty,
