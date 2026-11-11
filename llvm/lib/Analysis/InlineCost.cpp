@@ -2818,9 +2818,20 @@ bool CallAnalyzer::canJumpThreadIntoCaller() {
   if (!SingleReturn)
     return false;
 
-  // Check if the callee returns an i1
-  auto *RV = SingleReturn->getReturnValue();
-  if (F.getReturnType() != llvm::Type::getInt1Ty(F.getContext()))
+  // Predicate that tests if value is equivalent to I == 0 or I != 0.
+  using namespace llvm::PatternMatch;
+  auto IsZeroCmp = [](Value *Cond, const Value *V) -> bool {
+    CmpPredicate EqPred;
+    return match(Cond, m_ICmpLike(EqPred, m_Specific(V), m_Zero())) &&
+           ICmpInst::isEquality(EqPred);
+  };
+
+  // Ensure the candidate call's entry block has a conditional break
+  // that uses the call value inside of its condition.
+  auto *CallerCI =
+      dyn_cast<CondBrInst>(CandidateCall.getParent()->getTerminator());
+  if (!CallerCI || (CallerCI->getCondition() != &CandidateCall &&
+                    !IsZeroCmp(CallerCI->getCondition(), &CandidateCall)))
     return false;
 
   // Check the sink node's predecessors.
@@ -2833,12 +2844,14 @@ bool CallAnalyzer::canJumpThreadIntoCaller() {
     else if (DeadBlocks.contains(P))
       continue;
     else if (KnownSuccessors.contains(P) || P->getUniqueSuccessor())
-      // Ensure that any predecessors do not have an extra outgoing edge
-      // that might prevent the callee and caller CFGs from cleanly merging.
+      // Any predecessors must not have an extra outgoing edge that might
+      // prevent the callee and caller CFGs from cleanly merging.
       SC++;
     else
       return false;
   }
+
+  auto *RV = SingleReturn->getReturnValue();
 
   // Check if we're returning a known constant value.
   if (getDirectOrSimplifiedValue<Constant>(RV)) {
@@ -2862,21 +2875,19 @@ bool CallAnalyzer::canJumpThreadIntoCaller() {
 
     // Check if the entry block has a conditional br terminator.
     auto &EB = F.getEntryBlock();
-    auto *CI = dyn_cast<CondBrInst>(EB.getTerminator());
-    if (!CI)
+    auto *CalleeCI = dyn_cast<CondBrInst>(EB.getTerminator());
+    if (!CalleeCI)
       return false;
 
     // Check if the return value is the entry block condition or an xor that
     // inverts that condition.
-    using namespace llvm::PatternMatch;
-    if (RV != CI->getCondition() &&
-        !match(RV, m_Xor(m_Specific(CI->getCondition()), m_Constant())))
+    if (RV != CalleeCI->getCondition() &&
+        !match(RV, m_Xor(m_Specific(CalleeCI->getCondition()), m_Constant())) &&
+        !IsZeroCmp(CalleeCI->getCondition(), RV))
       return false;
   }
 
-  // Check if the caller uses the callee result in a conditional br
-  auto *CI = dyn_cast<CondBrInst>(CandidateCall.getParent()->getTerminator());
-  return CI && CI->getCondition() == &CandidateCall;
+  return true;
 }
 
 /// Analyze a call site for potential inlining.
