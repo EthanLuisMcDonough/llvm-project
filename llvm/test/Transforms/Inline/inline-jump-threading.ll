@@ -405,7 +405,7 @@ define i32 @test_int_simple(i32 %a) {
 ; CHECK-SAME: i32 [[A:%.*]]) {
 ; CHECK-NEXT:    call void @work()
 ; CHECK-NEXT:    [[R:%.*]] = add i32 [[A]], 15
-; CHECK-NEXT:    [[COND:%.*]] = icmp ule i32 [[R]], 25
+; CHECK-NEXT:    [[COND:%.*]] = icmp ne i32 [[R]], 0
 ; CHECK-NEXT:    br i1 [[COND]], label %[[B:.*]], label %[[EXIT:.*]]
 ; CHECK:       [[B]]:
 ; CHECK-NEXT:    br label %[[EXIT]]
@@ -414,7 +414,7 @@ define i32 @test_int_simple(i32 %a) {
 ;
   call void @work()
   %r = add i32 %a, 15
-  %cond = icmp ule i32 %r, 25
+  %cond = icmp ne i32 %r, 0
   br i1 %cond, label %b, label %exit
 b:
   br label %exit
@@ -427,12 +427,12 @@ define void @caller_int_simple(i32 %a) {
 ; CHECK-SAME: i32 [[A:%.*]]) {
 ; CHECK-NEXT:    call void @work()
 ; CHECK-NEXT:    [[R_I:%.*]] = add i32 [[A]], 15
-; CHECK-NEXT:    [[COND_I:%.*]] = icmp ule i32 [[R_I]], 25
+; CHECK-NEXT:    [[COND_I:%.*]] = icmp ne i32 [[R_I]], 0
 ; CHECK-NEXT:    br i1 [[COND_I]], label %[[IF_THEN:.*]], label %[[EXIT:.*]]
 ; CHECK:       [[IF_THEN]]:
 ; CHECK-NEXT:    br label %[[EXIT]]
 ; CHECK:       [[EXIT]]:
-; CHECK-NEXT:    [[COND:%.*]] = icmp ule i32 [[R_I]], 25
+; CHECK-NEXT:    [[COND:%.*]] = icmp ne i32 [[R_I]], 0
 ; CHECK-NEXT:    br i1 [[COND]], label %[[EXIT1:.*]], label %[[IF_THEN1:.*]]
 ; CHECK:       [[IF_THEN1]]:
 ; CHECK-NEXT:    br label %[[EXIT1]]
@@ -440,7 +440,7 @@ define void @caller_int_simple(i32 %a) {
 ; CHECK-NEXT:    ret void
 ;
   %r = call i32 @test_int_simple(i32 %a)
-  %cond = icmp ule i32 %r, 25
+  %cond = icmp ne i32 %r, 0
   br i1 %cond, label %exit, label %if.then
 if.then:
   br label %exit
@@ -497,7 +497,7 @@ exit:
   ret void
 }
 
-; Test inverted condition
+; Test mismatched condition
 define i32 @test_int_switched_noinline(i32 %a) {
 ; CHECK-LABEL: define i32 @test_int_switched_noinline(
 ; CHECK-SAME: i32 [[A:%.*]]) {
@@ -635,6 +635,49 @@ define void @caller_int_const_switched(i32 %a) {
 ;
   %r = call i32 @test_int_const_switched(i32 %a, i32 10)
   %cond = icmp ugt i32 %r, 20
+  br i1 %cond, label %exit, label %if.then
+if.then:
+  br label %exit
+exit:
+  ret void
+}
+
+; Test variable comparison operands
+define i32 @test_int_var_noinline(i32 %a, i32 %b) {
+; CHECK-LABEL: define i32 @test_int_var_noinline(
+; CHECK-SAME: i32 [[A:%.*]], i32 [[B:%.*]]) {
+; CHECK-NEXT:    call void @work()
+; CHECK-NEXT:    [[R:%.*]] = add i32 [[A]], 15
+; CHECK-NEXT:    [[COND:%.*]] = icmp ult i32 [[R]], [[B]]
+; CHECK-NEXT:    br i1 [[COND]], label %[[PATH:.*]], label %[[EXIT:.*]]
+; CHECK:       [[PATH]]:
+; CHECK-NEXT:    br label %[[EXIT]]
+; CHECK:       [[EXIT]]:
+; CHECK-NEXT:    ret i32 [[R]]
+;
+  call void @work()
+  %r = add i32 %a, 15
+  %cond = icmp ult i32 %r, %b
+  br i1 %cond, label %path, label %exit
+path:
+  br label %exit
+exit:
+  ret i32 %r
+}
+
+define void @caller_int_var_noinline(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: define void @caller_int_var_noinline(
+; CHECK-SAME: i32 [[A:%.*]], i32 [[B:%.*]], i32 [[C:%.*]]) {
+; CHECK-NEXT:    [[R:%.*]] = call i32 @test_int_var_noinline(i32 [[A]], i32 [[B]])
+; CHECK-NEXT:    [[COND:%.*]] = icmp ult i32 [[R]], [[C]]
+; CHECK-NEXT:    br i1 [[COND]], label %[[EXIT:.*]], label %[[IF_THEN:.*]]
+; CHECK:       [[IF_THEN]]:
+; CHECK-NEXT:    br label %[[EXIT]]
+; CHECK:       [[EXIT]]:
+; CHECK-NEXT:    ret void
+;
+  %r = call i32 @test_int_var_noinline(i32 %a, i32 %b)
+  %cond = icmp ult i32 %r, %c
   br i1 %cond, label %exit, label %if.then
 if.then:
   br label %exit
