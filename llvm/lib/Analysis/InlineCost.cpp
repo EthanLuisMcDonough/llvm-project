@@ -188,7 +188,7 @@ protected:
   virtual void onDisableSROA(AllocaInst *Arg) {}
 
   /// Called the analysis engine determines load elimination won't happen.
-  virtual void onDisableLoadElimination() {}
+  virtual void onDisableLoadElimination() {} 
 
   /// Called when we visit a CallBase, before the analysis starts. Return false
   /// to stop further processing of the instruction.
@@ -241,6 +241,10 @@ protected:
   /// Account SROA savings for the AllocaInst value.
   virtual void onAggregateSROAUse(AllocaInst *V) {}
 
+  /// Called when the function is determined to no longer be a single
+  /// basic block.
+  virtual void onMultipleBB() {}
+
   bool handleSROA(Value *V, bool DoNotDisable) {
     // Check for SROA candidates in comparisons.
     if (auto *SROAArg = getSROAArgForValueOrNull(V)) {
@@ -262,6 +266,7 @@ protected:
   bool HasIndirectBr = false;
   bool HasUninlineableIntrinsic = false;
   bool InitsVargArgs = false;
+  bool SingleBB = true;
 
   /// Number of bytes allocated statically by the callee.
   uint64_t AllocatedSize = 0;
@@ -303,6 +308,10 @@ protected:
 
   /// Whether we allow inlining for recursive call.
   bool AllowRecursiveCall = false;
+
+  struct MemoryOperationData {
+    bool InEntry, IsStore;
+  };
 
   SmallPtrSet<Value *, 16> LoadAddrSet;
 
@@ -534,8 +543,6 @@ class InlineCostCallAnalyzer final : public CallAnalyzer {
   // The cost-benefit pair computed by cost-benefit analysis.
   std::optional<CostBenefitPair> CostBenefit;
 
-  bool SingleBB = true;
-
   unsigned SROACostSavings = 0;
   unsigned SROACostSavingsLost = 0;
 
@@ -574,7 +581,7 @@ class InlineCostCallAnalyzer final : public CallAnalyzer {
 
   void onDisableLoadElimination() override {
     addCost(LoadEliminationCost);
-    LoadEliminationCost = 0;
+    LoadEliminationCost = 0; 
   }
 
   bool onCallBaseVisitStart(CallBase &Call) override {
@@ -741,18 +748,9 @@ class InlineCostCallAnalyzer final : public CallAnalyzer {
       if (*ProfileCount == 0)
         ColdSize += Cost - CostAtBBStart;
     }
-
-    auto *TI = BB->getTerminator();
-    // If we had any successors at this point, than post-inlining is likely to
-    // have them as well. Note that we assume any basic blocks which existed
-    // due to branches or switches which folded above will also fold after
-    // inlining.
-    if (SingleBB && TI->getNumSuccessors() > 1) {
-      // Take off the bonus we applied to the threshold.
-      Threshold -= SingleBBBonus;
-      SingleBB = false;
-    }
   }
+
+  void onMultipleBB() override { Threshold -= SingleBBBonus; }
 
   void onInstructionAnalysisStart(const Instruction *I) override {
     // This function is called to store the initial cost of inlining before
@@ -967,6 +965,23 @@ class InlineCostCallAnalyzer final : public CallAnalyzer {
         NumLoops++;
       }
       addCost(NumLoops * InlineConstants::LoopPenalty);
+    }
+
+    if (!LoadAddrSet.empty()) {
+      unsigned I = 0;
+      const auto End = CandidateCall.getParent()->end();
+      for (auto It = CandidateCall.getIterator(); I < 64 && It != End; It++, I++) {
+        if (auto *LI = dyn_cast<LoadInst>(It)) {
+          if (LoadAddrSet.contains(LI->getPointerOperand())) {
+            LLVM_DEBUG(dbgs() << "FOUND");
+          } else {
+            LLVM_DEBUG(dbgs() << "NOT FOUND");
+          }
+          LLVM_DEBUG(dbgs() << " " << LI->getPointerOperand() << "\n");
+        }
+      }
+    } else {
+      LLVM_DEBUG(dbgs() << "EMpty set\n");
     }
 
     // We applied the maximum possible vector bonus at the beginning. Now,
@@ -1402,10 +1417,12 @@ void CallAnalyzer::disableSROA(Value *V) {
 }
 
 void CallAnalyzer::disableLoadElimination() {
-  if (EnableLoadElimination) {
+  if (EnableLoadElimination && !SingleBB) {
     onDisableLoadElimination();
     EnableLoadElimination = false;
   }
+  LLVM_DEBUG(dbgs() << "Clearing set\n");
+  LoadAddrSet.clear();
 }
 
 /// Accumulate a constant GEP offset into an APInt if possible.
@@ -2237,6 +2254,12 @@ bool CallAnalyzer::visitLoad(LoadInst &I) {
   if (handleSROA(I.getPointerOperand(), I.isSimple()))
     return true;
 
+  std::pair<Value *, APInt> P = ConstantOffsetPtrs.lookup(I.getPointerOperand());
+  if (P.first)
+    LLVM_DEBUG(dbgs() << "VISITING LOAD " << *P.first << " " << P.second << "\n");
+  else
+    LLVM_DEBUG(dbgs() << "DIDN'T FIND " << *I.getPointerOperand() << "\n");
+  //bool StoreLoad = EnableLoadElimination || isa<ReturnInst>(I.getParent()->getTerminator());
   // If the data is already loaded from this address and hasn't been clobbered
   // by any stores or calls, this load is likely to be redundant and can be
   // eliminated.
@@ -2929,6 +2952,11 @@ InlineResult CallAnalyzer::analyze() {
     BBWorklist.insert_range(successors(BB));
 
     onBlockAnalyzed(BB);
+
+    if (SingleBB && BB->getTerminator()->getNumSuccessors() > 1) {
+      SingleBB = false;
+      onMultipleBB();
+    }
   }
 
   // If this is a noduplicate call, we can still inline as long as
